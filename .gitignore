@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env
+.env
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+
+# Nested repo (separate tool, not part of this project's source)
+skill_ai/
