@@ -166,3 +166,31 @@ auth lokal memakai `ALLOW_DEV_TOKEN=true` + binding `127.0.0.1` (bukan `0.0.0.0`
 di-set eksplisit (`config.py`). Tabel status di atas dibiarkan sebagai catatan historis.
 
 **Hand off:** → `developer`, instruksi lengkap di `docs/instructions-developer-local.md`.
+
+---
+
+## Addendum 2026-08-11 (2) — Provider LLM: Google Gemini (free tier)
+
+**Keputusan:** provider LLM utama berpindah **Anthropic → Google Gemini API (free tier, AI Studio)**.
+Dikonfirmasi user 2026-08-11 setelah uji empiris dengan key user sendiri.
+
+| Fungsi | Model | Alasan |
+|---|---|---|
+| `/suggest` (saran interview) | `gemini-3.5-flash` | Uji kualitas gaya /suggest: saran grounded ke portfolio, bahasa Indonesia rapi |
+| Terjemahan realtime (F-1) | `gemini-3.5-flash-lite` | `3.5-flash` membakar ~441 token thinking untuk translasi 1 kalimat; flash-lite selesai 49 token total — lebih cepat & hemat kuota |
+
+**Bukti uji (2026-08-11):** autentikasi ✓; `gemini-2.5-flash` ditutup untuk akun baru;
+burst 15 panggilan beruntun → 15/15 sukses (rate limit per-menit aman); kualitas terjemahan ✓.
+
+**Alternatif ditolak:** Anthropic PAYG (kredit min $5; kualitas teruji, tapi user memilih Rp0),
+ChatGPT Go / Claude Pro (langganan chat konsumen — bukan API).
+
+**Sacrifice yang diterima secara sadar oleh user:** (1) kebijakan data free tier — *"content
+used to improve our products"* — berlaku atas transkrip interview + CV; (2) kuota harian free
+tier (angka per-akun di AI Studio) — dimitigasi dengan batching terjemahan 2–3 utterance per
+panggilan; (3) kualitas saran vs Claude Sonnet belum dieval formal — eval 20 contoh menjadi
+bagian acceptance F-1/F-2.
+
+`ANTHROPIC_API_KEY` menjadi tidak terpakai. Revisit ke provider berbayar bila: kuota harian
+mulai tertabrak, kualitas saran mengecewakan di pemakaian nyata, atau kebijakan data menjadi
+masalah. Handoff: `docs/instructions-developer-f1-f2.md` (direvisi total untuk Gemini).

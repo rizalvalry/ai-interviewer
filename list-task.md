@@ -181,3 +181,37 @@ Keputusan user: (a) kerjakan WI-6 opsional, (b) commission `qa-analysis` untuk t
 
 ### Next action
 User: buat API key di console.anthropic.com → isi ke .env. Developer: kerjakan WI-7..12.
+
+---
+
+## [2026-08-11 15:30] — Keputusan: Gemini free tier jadi provider utama; revisi total handoff F-1/F-2
+
+**Intake class:** Multi-skill (solution-architect → developer)
+**Status keseluruhan:** `in-progress`
+**RAG:** 🟢 Green
+**Refs:** #2026-08-11 14:00 (menggantikan strategi provider Anthropic di entri itu)
+
+### Keputusan
+- User memilih Opsi B setelah uji empiris key Gemini miliknya: auth ✓, burst 15/15 ✓, kualitas terjemahan & saran ✓. Trade-off data free tier ("content used to improve our products" atas transkrip interview + CV) DIKONFIRMASI diterima user secara eksplisit.
+- Pemetaan model (ai-engineer): /suggest → gemini-3.5-flash; terjemahan F-1 → gemini-3.5-flash-lite (flash penuh boros ~441 token thinking per translasi). gemini-2.5-flash tidak tersedia utk akun baru.
+- Mitigasi kuota harian: batching terjemahan 2–3 utterance/panggilan (wajib, WI-8).
+- ANTHROPIC_API_KEY tidak terpakai; WI-10 lama (cache_control Anthropic) gugur — digantikan implicit caching Gemini via prefix stabil.
+
+### Artefak
+- [x] ADR Addendum 2026-08-11 (2) — docs/architecture/deployment-strategy.md
+- [x] docs/instructions-developer-f1-f2.md — REVISI TOTAL (WI-7..12 versi Gemini, ada peringatan supersession di header utk claude dev)
+- [x] .env lokal: GEMINI_API_KEY + model vars terpasang (gitignored, terverifikasi)
+
+### RAID
+- **R:** Kuota harian free tier tertabrak saat interview panjang — detection: HTTP 429 di log | mitigation: batching (WI-8) + graceful degrade + revisit provider berbayar bila berulang.
+- **R:** Claude dev sempat mengerjakan versi Anthropic dari handoff lama — detection: laporan dev menyebut claude-haiku/cache_control | mitigation: header supersession di dokumen; PM tolak deliverable berbasis versi lama.
+- **A:** Key `AQ.` format baru tetap berlaku jangka panjang — confidence M — verify by: kegagalan auth mendadak → cek AI Studio.
+- **I:** Key Gemini & Anthropic sempat transit via chat — owner: user | mitigasi: rotate di console masing-masing setelah stack stabil (non-blocking).
+
+### Gate log
+- [x] DoR delegasi developer (Gemini) — 2026-08-11 15:30
+- [ ] DoD — menunggu laporan developer
+- [ ] Go / No-go — belum
+
+### Next action
+User: serahkan docs/instructions-developer-f1-f2.md (versi Gemini) ke claude dev. PM: gate DoD saat laporan masuk.
