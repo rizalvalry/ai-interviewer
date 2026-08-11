@@ -12,6 +12,9 @@ services:
       # Whisper model is downloaded on first run (faster-whisper, see asr.py). Naming the
       # volume keeps the download across `down`/`up` and image rebuilds.
       - whisper-cache:/home/user/.cache/huggingface
+      # Portfolio history (portfolio_store.py, ADR Addendum 2026-08-11 (3)) - a named volume,
+      # never a bind-mount into the repo tree, so a CV can never end up tracked by git.
+      - portfolio-data:/home/user/data
 
   frontend:
     image: nginx:alpine
@@ -22,3 +25,4 @@ services:
 
 volumes:
   whisper-cache:
+  portfolio-data:

@@ -15,7 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # asr.py). HF_HOME must point at a directory the non-root user owns, or the download fails
 # under the platform's read-only-filesystem assumptions.
 ENV HF_HOME=/home/user/.cache/huggingface
-RUN mkdir -p $HF_HOME && chown -R user:user /home/user
+# /home/user/data (portfolio_store.py's SQLite file) must exist and be owned by `user`
+# BEFORE the named volume is first attached - Docker seeds an empty named volume from the
+# image's existing directory content/ownership, so a path created only at container-start
+# would land owned by root and the non-root app user couldn't write the DB file into it.
+RUN mkdir -p $HF_HOME /home/user/data && chown -R user:user /home/user
 
 COPY --chown=user:user . .
 
