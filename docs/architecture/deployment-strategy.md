@@ -1,6 +1,8 @@
 # Deployment Strategy — ai.interviewer
 
 > Architecture decision record. Owner: `solution-architect`. Ditulis: 2026-08-09.
+> **⚠️ ADDENDUM 2026-08-11 — keputusan di bawah DITUNDA, topologi aktif berubah ke
+> localhost-first. Lihat bagian "Addendum 2026-08-11" di akhir dokumen.**
 > Konteks: real-time interview co-pilot (dual-audio capture → streaming ASR → Claude suggestion),
 > saat ini berjalan di localhost, perlu dipetakan ke topologi cloud produksi.
 
@@ -134,3 +136,33 @@ docs/deployment-checklist.md                    — checklist env var + langkah 
 mitigasi untuk temuan #4 (Space Private vs stand-in passphrase) bersama `solution-architect`.
 → `qa-analysis` — test plan end-to-end lintas 3 origin (CORS, token issuance→verify, reconnect/seq
 dedup saat WS terputus jaringan lintas provider), plus skenario negatif untuk #2 dan #3.
+
+---
+
+## Addendum 2026-08-11 — Pivot ke localhost-first (keputusan aktif)
+
+Dua fakta baru mengubah keputusan di atas:
+
+1. **Kebijakan Hugging Face berubah** (diverifikasi 2026-08-11 dari docs resmi HF):
+   membuat **Docker Space kini mensyaratkan paid plan — PRO $9/bln** untuk akun personal.
+   Hardware CPU Basic tetap $0/jam, tapi gerbang pembuatannya berbayar. Asumsi "HF Space
+   gratis" yang mendasari keputusan 2026-08-09 tidak lagi berlaku.
+2. **Kebutuhan user dikonfirmasi**: tool personal yang dijalankan on-demand saat interview,
+   berpindah-pindah laptop — bukan layanan publik 24/7.
+
+**Keputusan baru:** seluruh stack berjalan **localhost via Docker Compose**, di-start saat
+dibutuhkan. Portabilitas lintas device dicapai lewat git (kode, `origin` =
+`github.com/rizalvalry/ai-interviewer.git`), Docker image (runtime + model), dan `.env`
+per laptop (secrets). Vercel/HF Space/tunnel: tidak dipakai; ditinjau ulang hanya jika
+kebutuhan berubah jadi multi-user/publik (kandidat saat itu: VPS ~$4–9/bln yang sekaligus
+menampung Laravel auth — lihat "Alternatif yang dipertimbangkan" di atas).
+
+**Database:** tidak ada untuk mode ini. `services/auth-laravel/` tetap placeholder;
+auth lokal memakai `ALLOW_DEV_TOKEN=true` + binding `127.0.0.1` (bukan `0.0.0.0`).
+
+**Koreksi status keamanan:** temuan #2 (`/suggest` tanpa token) dan #3 (fail-open
+`AUTH_SECRET`) **sudah diperbaiki di kode** — `/suggest` memverifikasi token
+(`app.py`), dan startup menolak `AUTH_SECRET` kosong kecuali `ALLOW_INSECURE_NO_AUTH`
+di-set eksplisit (`config.py`). Tabel status di atas dibiarkan sebagai catatan historis.
+
+**Hand off:** → `developer`, instruksi lengkap di `docs/instructions-developer-local.md`.

@@ -93,3 +93,49 @@
 - [!] `services/asr-suggest/app.py` — tambahkan pengecekan token di `/suggest` (samakan dengan `/stream`). Owner: `developer`.
 - [!] `services/asr-suggest/app.py` / `config.py` — startup harus fail-loud (bukan cuma warning) saat `AUTH_SECRET` kosong di environment non-lokal. Owner: `developer`.
 - [!] Keputusan strategi mitigasi trap sequencing (`/dev/token` vs Laravel belum ada) — Owner: `solution-architect` + konfirmasi user.
+
+---
+
+## [2026-08-11 11:30] — Pivot topologi ke localhost-first (Docker on-demand) + instruksi developer + disiplin versioning GitHub
+
+**Intake class:** Multi-skill
+**Status keseluruhan:** `in-progress`
+**RAG:** 🟢 Green
+**Refs:** #2026-08-09 (deployment strategy — keputusan cloud DITUNDA via addendum ADR)
+
+### Konteks keputusan
+- HF berubah kebijakan: Docker Space kini butuh PRO $9/bln (diverifikasi dari docs resmi HF, 2026-08-11). Asumsi "HF gratis" gugur.
+- User memutuskan: jalankan semua di localhost via Docker, start on-demand saat interview, berpindah-pindah laptop. Vercel/HF/tunnel tidak dipakai.
+- Database: TIDAK diperlukan (asr-suggest stateless; auth-laravel tetap placeholder). MySQL cPanel baru relevan jika kelak butuh data persisten lintas laptop.
+- Koreksi RAID lama: 2 temuan Critical (#/suggest tanpa token, #AUTH_SECRET fail-open) ternyata SUDAH diperbaiki di kode (app.py:111 verifikasi token; config.py ALLOW_INSECURE_NO_AUTH fail-loud gate). Entri Catatan Perbaikan 2026-08-09 dianggap selesai; validasi ulang formal oleh security-reviewer tidak lagi memblokir karena tidak ada eksposur publik.
+
+### Delegation
+| # | Work item | Owner skill | Subagent (model) | Depends on | DoR | Status |
+|---|-----------|-------------|------------------|-----------|-----|--------|
+| 1 | Addendum ADR pivot localhost-first | solution-architect | inherits caller | fakta pricing HF + konfirmasi user | [x] | done |
+| 2 | Instruksi developer (docs/instructions-developer-local.md) | project-manager | — | #1 | [x] | done |
+| 3 | WI-1..5: docker-compose, .env.example, README quickstart, run-dev.ps1, verifikasi | developer | developer (sonnet) | #2 | [x] | **belum didelegasikan — menunggu perintah user** |
+| 4 | WI-6 (opsional): bake model + Docker Hub | developer | developer (sonnet) | #3 diterima | [ ] | deferred |
+
+### Handoff artifacts required
+- [x] Addendum ADR — dari `solution-architect` → semua: ada di docs/architecture/deployment-strategy.md (Addendum 2026-08-11)
+- [x] Handoff package — dari `project-manager` → `developer`: docs/instructions-developer-local.md (work items, done conditions, acceptance criteria, aturan versioning)
+
+### RAID
+- **R:** Port binding compose default 0.0.0.0 akan mengekspos service tanpa-auth ke LAN — detection: `docker ps` menunjukkan binding | mitigation: instruksi mewajibkan `127.0.0.1:...` (hard rule di instruksi developer).
+- **A:** Kebutuhan tetap personal/single-user — confidence H (dikonfirmasi user 2026-08-11) — verify by: revisit jika user menyebut kandidat/multi-user mengakses langsung.
+- **A:** Laptop-laptop target sanggup inference Whisper `base` int8 CPU — confidence M — verify by: smoke test di laptop kedua saat WI-5.
+- **D:** WI-3..5 bergantung pada WI-1/WI-2 (compose + env template harus ada dulu).
+
+### Scope control
+- **In:** compose stack localhost, .env template, README quickstart, disiplin git push berkala ke origin.
+- **Deferred:** WI-6 bake model/Docker Hub (opsional, setelah WI-1..5 diterima); MySQL/Laravel auth (tunggu kebutuhan data lintas laptop nyata); deploy cloud apa pun (revisit: VPS ~$4–9/bln bila jadi multi-user).
+- **Rejected:** Vercel sebagai host backend Docker (3 blocker teknis: no container runtime, no WS Python, size/state limit — lihat ADR).
+
+### Gate log
+- [x] DoR untuk delegasi ke developer — 2026-08-11 11:30 (owner tunggal jelas, artefak input lengkap, done condition konkret, model pinned: sonnet)
+- [ ] DoD — menunggu hasil developer (acceptance criteria di instructions-developer-local.md)
+- [ ] Go / No-go — go-live = "clone di laptop lain langsung jalan"; belum dinilai
+
+### Next action
+Delegasikan WI-1..5 ke `developer` (sonnet) dengan input docs/instructions-developer-local.md — menunggu perintah user.
