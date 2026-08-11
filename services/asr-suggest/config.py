@@ -42,8 +42,13 @@ ALLOW_DEV_TOKEN = os.getenv("ALLOW_DEV_TOKEN", "false").strip().lower() == "true
 # set it in your own .env to keep the old no-auth localhost behavior.
 ALLOW_INSECURE_NO_AUTH = os.getenv("ALLOW_INSECURE_NO_AUTH", "false").strip().lower() == "true"
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5")
-CLAUDE_TIMEOUT_SEC = float(os.getenv("CLAUDE_TIMEOUT_SEC", "15"))
+# ADR Addendum 2026-08-11 (2): provider utama Gemini free tier, REST via httpx (no SDK).
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_SUGGEST_MODEL = os.getenv("GEMINI_SUGGEST_MODEL", "gemini-3.5-flash")
+# flash-lite for translation: flash burns ~440 thinking tokens per one-sentence translation,
+# flash-lite finishes in ~49 total - materially faster and cheaper against the free-tier
+# daily quota (docs/instructions-developer-f1-f2.md).
+GEMINI_TRANSLATE_MODEL = os.getenv("GEMINI_TRANSLATE_MODEL", "gemini-3.5-flash-lite")
+GEMINI_TIMEOUT_SEC = float(os.getenv("GEMINI_TIMEOUT_SEC", "15"))
 
 CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "*").split(",") if o]

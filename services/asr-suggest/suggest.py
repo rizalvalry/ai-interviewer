@@ -1,9 +1,14 @@
-import asyncio
 import logging
+
+import httpx
 
 import config
 
 log = logging.getLogger("suggest")
+
+# REST, not the google-genai SDK (ADR Addendum 2026-08-11 (2)): one dependency (httpx,
+# already required for asr-suggest) instead of a second LLM SDK in the image.
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 SYSTEM_PROMPT = """Kamu adalah asisten yang membantu KANDIDAT menjawab pertanyaan interviewer secara real time.
 
@@ -18,17 +23,6 @@ Aturan yang tidak boleh dilanggar:
 - Jawab ringkas: maksimal 4 poin, siap diucapkan, bahasa yang sama dengan pertanyaan.
 
 Keluaran: poin-poin singkat saja, tanpa basa-basi pembuka."""
-
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        from anthropic import AsyncAnthropic
-
-        _client = AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY)
-    return _client
 
 
 def _build_user_content(question: str, utterances: list[dict], low_confidence: bool) -> str:
@@ -48,64 +42,65 @@ def _build_user_content(question: str, utterances: list[dict], low_confidence: b
     )
 
 
-async def ask_claude(
+def _extract_text(data: dict) -> str:
+    candidates = data.get("candidates") or []
+    if not candidates:
+        return ""
+    parts = candidates[0].get("content", {}).get("parts", [])
+    return "".join(p.get("text", "") for p in parts)
+
+
+async def ask_llm(
     question: str,
     utterances: list[dict],
     portfolio: str = "",
     low_confidence: bool = False,
 ) -> dict:
-    if not config.ANTHROPIC_API_KEY:
+    if not config.GEMINI_API_KEY:
         return {"ok": False, "reason": "no-api-key", "text": "Saran tidak tersedia."}
     if not question.strip():
         return {"ok": False, "reason": "empty-question", "text": "Saran tidak tersedia."}
 
-    # cache_control on SYSTEM_PROMPT too (not just portfolio below): when portfolio is empty
-    # there would otherwise be zero cache breakpoints and this always-identical block would
-    # never get the ~0.1x cached-read price on repeat calls within a session.
-    system: list[dict] = [
-        {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
-    ]
+    # systemInstruction.parts kept in a stable order (SYSTEM_PROMPT first, portfolio second)
+    # across every call in a session - a stable repeated prefix is what Gemini's implicit
+    # context caching keys off, same intent as the old Anthropic cache_control blocks.
+    system_parts = [{"text": SYSTEM_PROMPT}]
     if portfolio.strip():
-        # Portfolio is resent every turn and never changes within a session.
-        system.append(
-            {
-                "type": "text",
-                "text": f"Portfolio kandidat:\n{portfolio.strip()}",
-                "cache_control": {"type": "ephemeral"},
-            }
-        )
+        system_parts.append({"text": f"Portfolio kandidat:\n{portfolio.strip()}"})
 
-    user_content = _build_user_content(question, utterances, low_confidence)
-    client = _get_client()
+    body = {
+        "systemInstruction": {"parts": system_parts},
+        "contents": [
+            {"role": "user", "parts": [{"text": _build_user_content(question, utterances, low_confidence)}]}
+        ],
+        "generationConfig": {"maxOutputTokens": 400},
+    }
+    url = GEMINI_URL.format(model=config.GEMINI_SUGGEST_MODEL)
     last_error = "unknown"
 
     for attempt in (1, 2):
         try:
-            resp = await asyncio.wait_for(
-                client.messages.create(
-                    model=config.CLAUDE_MODEL,
-                    max_tokens=400,
-                    system=system,
-                    messages=[{"role": "user", "content": user_content}],
-                ),
-                timeout=config.CLAUDE_TIMEOUT_SEC,
-            )
-            text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-            u = resp.usage
+            async with httpx.AsyncClient(timeout=config.GEMINI_TIMEOUT_SEC) as client:
+                resp = await client.post(url, params={"key": config.GEMINI_API_KEY}, json=body)
+            if resp.status_code == 429:
+                log.warning("suggest_quota attempt=%d", attempt)
+                return {"ok": False, "reason": "quota", "text": "Saran tidak tersedia."}
+            resp.raise_for_status()
+            data = resp.json()
+            text = _extract_text(data)
+            usage = data.get("usageMetadata", {})
             log.info(
-                "claude_usage attempt=%d input=%d output=%d cache_read=%d cache_write=%d",
+                "gemini_usage endpoint=suggest attempt=%d prompt_tokens=%d output_tokens=%d",
                 attempt,
-                u.input_tokens,
-                u.output_tokens,
-                getattr(u, "cache_read_input_tokens", None) or 0,
-                getattr(u, "cache_creation_input_tokens", None) or 0,
+                usage.get("promptTokenCount", 0),
+                usage.get("candidatesTokenCount", 0),
             )
             return {"ok": True, "text": text.strip(), "attempt": attempt}
-        except asyncio.TimeoutError:
+        except httpx.TimeoutException:
             last_error = "timeout"
-            log.warning("claude_timeout attempt=%d", attempt)
+            log.warning("suggest_timeout attempt=%d", attempt)
         except Exception as exc:
             last_error = type(exc).__name__
-            log.warning("claude_error attempt=%d err=%s", attempt, exc)
+            log.warning("suggest_error attempt=%d err=%s", attempt, exc)
 
     return {"ok": False, "reason": last_error, "text": "Saran tidak tersedia."}

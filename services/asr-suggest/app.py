@@ -32,8 +32,8 @@ METRICS = {
     "windows_gated_silent": 0,
     "segments_filtered": 0,
     "frames_rejected_seq": 0,
-    "claude_calls": 0,
-    "claude_errors": 0,
+    "llm_calls": 0,
+    "llm_errors": 0,
     "asr_latency_ms_last": 0,
 }
 
@@ -115,9 +115,9 @@ async def suggest_endpoint(req: SuggestRequest):
         log.warning("suggest_rejected session=%s reason=%s", req.session, reason)
         raise HTTPException(status_code=401, detail=reason)
 
-    METRICS["claude_calls"] += 1
+    METRICS["llm_calls"] += 1
     t0 = time.perf_counter()
-    result = await suggest.ask_claude(
+    result = await suggest.ask_llm(
         question=req.question,
         utterances=req.utterances,
         portfolio=req.portfolio,
@@ -125,8 +125,8 @@ async def suggest_endpoint(req: SuggestRequest):
     )
     result["latency_ms"] = int((time.perf_counter() - t0) * 1000)
     if not result.get("ok"):
-        METRICS["claude_errors"] += 1
-        # Guide 10 point 7: a Claude failure must never look like a transcription failure.
+        METRICS["llm_errors"] += 1
+        # Guide 10 point 7: an LLM failure must never look like a transcription failure.
         return JSONResponse(result, status_code=200)
     return result
 
