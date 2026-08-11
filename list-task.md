@@ -218,3 +218,28 @@ User: serahkan docs/instructions-developer-f1-f2.md (versi Gemini) ke claude dev
 
 ### Update insiden [2026-08-11 15:45]
 - **I (resolved):** Claude dev menemukan plaintext API key di file lokal `docs/auth/` dan meremediasi (gitignore + hapus). Audit PM atas seluruh riwayat git (`--diff-filter=A`, pencarian string kedua key): file TIDAK PERNAH ter-commit/ter-push — key TIDAK bocor via GitHub. Rotasi karena jalur git tidak diperlukan; anjuran rotasi karena transit chat tetap berlaku (non-blocking). Catatan proses: dev juga sudah mengerjakan WI-11 lama (fix ALLOW_INSECURE_NO_AUTH) — tetap valid di handoff baru.
+
+---
+
+## [2026-08-11 16:30] — Gate DoD: migrasi Gemini + F-1 + F-2 (WI-7..12) — ACCEPTED
+
+**Intake class:** Governance-only (acceptance review)
+**Status keseluruhan:** `done`
+**RAG:** 🟢 Green
+**Refs:** #2026-08-11 15:30
+
+### Verifikasi independen PM (dieksekusi sendiri, bukan membaca laporan)
+- [x] Commit per-WI ter-push (7349ecc WI-7, 81f0100 WI-8, 6991138 WI-9, b65a9e9 WI-11; WI-10 PDF dari siklus sebelumnya df2a5c1 dengan pdfjs vendored)
+- [x] `anthropic` hilang dari requirements & kode; config GEMINI_* lengkap; .env.example Gemini-only + ALLOW_INSECURE_NO_AUTH=false (temuan Low CLOSED)
+- [x] pytest in-container: 41 passed (naik dari baseline 22)
+- [x] Live gate: /health OK; /suggest tanpa token → 401; /suggest + token → real Gemini, ok:true, latency 3.8s, saran grounded ke portfolio
+- [x] Wiring F-1: batching per-channel + flush non-blocking di app.py; frontend kontrak ref/text
+- [x] Eval mini 20/20 terjemahan (tabel di laporan dev): 0 error, istilah teknis dipertahankan sesuai aturan prompt
+- [x] Anomali "saran berbahasa EN" diaudit: aturan "bahasa yang sama dengan pertanyaan" warisan commit awal — perilaku BENAR; redaksi done-condition PM yang imprecise. Bukan defect.
+
+### Gate log
+- [x] DoD **PASS** — 2026-08-11 16:30
+- [x] Go / No-go — **Go**. Tag v0.3.0 dipasang & ter-push oleh PM atas persetujuan acceptance.
+
+### Residual (owner: user — satu-satunya yang bisa membuktikan)
+- [ ] Uji live di browser dgn mic asli (http://127.0.0.1:5500): percakapan EN → transkrip + terjemahan ID ≤5s; percakapan ID → tanpa terjemahan; upload CV PDF → saran mengutip CV. Bila ada yang janggal → laporkan, jadi entri needs-fix baru.
