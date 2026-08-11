@@ -146,3 +146,38 @@
 
 ### Next action
 Keputusan user: (a) kerjakan WI-6 opsional, (b) commission `qa-analysis` untuk test auth gate permanen, atau (c) cukup — pakai stack untuk interview.
+
+---
+
+## [2026-08-11 14:00] — Fitur F-1 (terjemahan realtime side-by-side) & F-2 (upload portfolio PDF) + klarifikasi akun API
+
+**Intake class:** Multi-skill (ai-engineer → developer)
+**Status keseluruhan:** `in-progress`
+**RAG:** 🟢 Green
+**Refs:** #2026-08-11 11:30
+
+### Keputusan / jawaban
+- Claude Pro TIDAK bisa dipakai sebagai API aplikasi — butuh Anthropic Console (pay-as-you-go, kredit min ~$5). Estimasi biaya /suggest ±$0.10–0.30/sesi (claude-sonnet-5, harga intro s/d 2026-08-31). API key hanya hidup di .env lokal, tidak pernah di-share ke chat/git.
+- F-1 (ai-engineer): Generation; claude-haiku-4-5; hanya utterance final; EN→ID tampil bersebelahan, ID tanpa terjemahan; async non-blocking p95<3s; biaya ±$0.10–0.15/sesi.
+- F-2 (ai-engineer): bukan AI call — ekstraksi client-side (PDF text-based, dikonfirmasi user), full inject TANPA chunking/RAG; guard 30K char; WAJIB cache_control pada blok portfolio di suggest.py.
+
+### Delegation
+| # | Work item | Owner skill | Subagent (model) | Depends on | DoR | Status |
+|---|-----------|-------------|------------------|-----------|-----|--------|
+| 1 | Strategi F-1/F-2 | ai-engineer | inherits caller | konfirmasi user (arah bahasa, PDF text-based) | [x] | done |
+| 2 | Handoff docs/instructions-developer-f1-f2.md (WI-7..12) | project-manager | — | #1 | [x] | done |
+| 3 | WI-7..12 implementasi | developer | developer (sonnet) | #2 | [x] | delegated (via user → claude dev) |
+
+### RAID
+- **A:** Arah bahasa F-1 = EN→ID saja (ID tidak diterjemahkan) — confidence M, kalimat user ambigu — verify by: konfirmasi user saat review hasil; perubahan ke dua-arah = perubahan kecil.
+- **A:** PDF user text-based — confidence H (dikonfirmasi) — mitigasi: WI-9 wajib error jelas untuk PDF hasil scan.
+- **R:** Terjemahan memblokir pipeline ASR bila diimplementasi sinkron — detection: latency transkrip naik | mitigation: hard rule non-blocking di instruksi + acceptance criteria graceful-degrade.
+- **D:** F-1/F-2 butuh ANTHROPIC_API_KEY terisi — blocked on: user membuat akun Console + isi kredit.
+
+### Gate log
+- [x] DoR delegasi developer — 2026-08-11 14:00
+- [ ] DoD — menunggu laporan developer (acceptance criteria di instructions-developer-f1-f2.md)
+- [ ] Go / No-go — belum
+
+### Next action
+User: buat API key di console.anthropic.com → isi ke .env. Developer: kerjakan WI-7..12.
