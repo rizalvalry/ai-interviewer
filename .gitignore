@@ -7,6 +7,10 @@ __pycache__/
 # Env
 .env
 
+# A real credential was once dropped here in plaintext (2026-08-11, remediated) - block the
+# path itself so a repeat mistake can't accidentally get committed.
+docs/auth/
+
 # Node
 node_modules/
 
