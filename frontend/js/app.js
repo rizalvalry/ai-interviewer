@@ -69,7 +69,7 @@ function setLevel(channel, rms) {
 
 function onTranscript(msg) {
   if (msg?.type === 'translation') {
-    timeline.addTranslation(msg.ref_seq, msg.text_id);
+    timeline.addTranslation(msg.ref, msg.text);
     return;
   }
   if (!msg?.text) return;
