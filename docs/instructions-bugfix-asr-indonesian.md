@@ -12,6 +12,32 @@
   low-conf), "Sorry" — frasa pendek yang tidak pernah diucapkan.
 - Kondisi: `WHISPER_MODEL=base`, `language=None` (auto-detect per window ~2s).
 
+## Gejala #2 (laporan user 2026-08-11 malam, setelah model=small ter-deploy)
+Bicara kontinu & intens (tab audio), tapi timeline hanya menangkap fragmen sebaris-sebaris
+— sebagian besar isi hilang (screenshot: docs/screenshots/not-same-with-audio-get.png).
+
+**Bukti awal (dikumpulkan PM dari stack live):** host 32 core, tapi `WHISPER_CPU_THREADS=2`
++ `MAX_CONCURRENT_ASR=2`; log warmup: deteksi bahasa utk audio 1 detik makan ±2,3 detik →
+inference model `small` di jatah 2 thread LEBIH LAMBAT dari realtime untuk 2 channel.
+Catatan kondisi uji: sumber audio = video YouTube (ada musik/efek latar) — perberat, tapi
+jangan dipakai untuk menepis bug.
+
+| # | Hipotesis (gejala #2) | Prediksi yang bisa difalsifikasi |
+|---|---|---|
+| H4 | **Throughput starvation**: real-time factor >1 → buffer overflow (`MAX_BUF_SEC=30`) → audio dibuang | `WHISPER_CPU_THREADS=8` → `asr_latency_ms_last` < 2000 (WINDOW_SEC) konsisten dan coverage pulih pada uji bicara kontinu ≥60 detik |
+| H5 | Over-gating pasca-fix halusinasi: window valid ikut ter-drop | Snapshot `/metrics` SEBELUM restart pada sesi repro: rasio `windows_gated_silent`+`segments_filtered` terhadap `windows_transcribed` abnormal tinggi saat bicara kontinu |
+| H6 | Perakitan utterance final bergantung jeda: bicara tanpa jeda → jarang finalize | Log/trace menunjukkan interim banyak tapi finalize sedikit meski inference realtime (setelah H4 dikesampingkan) |
+
+Instrumentasi wajib untuk diagnosis: tambah counter `buffer_dropped_sec`/`windows_dropped`
+di metrics bila belum ada — "audio dibuang" saat ini tidak terlihat di observability
+(gap: kejadian drop harus terukur, bukan disimpulkan). Ambil snapshot `/metrics` saat
+repro, JANGAN setelah restart (metrics reset).
+
+Arah fix tambahan bila H4 terkonfirmasi: naikkan default `WHISPER_CPU_THREADS` secara
+proporsional (dokumentasikan formula threads×concurrency ≤ core), dan tampilkan indikator
+lag/drop di UI supaya user tahu saat pipeline tertinggal — jangan pernah membuang audio
+secara diam-diam.
+
 ## Fase 1 — Diagnosis (validasi hipotesis dengan bukti, bukan tebakan)
 
 Reproduksi: rekam beberapa klip WAV 16kHz pendek (bisa minta user merekam, atau pakai TTS)

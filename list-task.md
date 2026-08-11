@@ -313,3 +313,8 @@ User: (a) coba mitigasi cepat WHISPER_MODEL=small di .env + compose up -d, lapor
 
 ### Update scope [2026-08-11 18:30]
 - User menegaskan: scope = SELURUH ucapan bahasa Indonesia, bukan hanya "selamat sore" (itu contoh repro). Acceptance diperkeras: +klip ID bervariasi eksplisit, +≥3 klip code-switching ID-EN (norma interview teknis, bukan edge case). Handoff sudah diserahkan user ke claude dev — item #1 status delegated aktif.
+
+### Update gejala #2 [2026-08-11 19:00]
+- User melapor (dengan screenshot): bicara kontinu tapi transkrip hanya fragmen sebaris-sebaris. Screenshot juga mengkonfirmasi model=small + selector bahasa + portfolio picker SUDAH ter-deploy oleh dev (belum ada laporan formal ke gate PM — proses: minta dev tetap kirim laporan per fase).
+- Bukti PM dari stack live: host 32 core vs WHISPER_CPU_THREADS=2; warmup 1s audio = ±2.3s → inference < realtime utk 2 channel. Hipotesis utama H4 throughput starvation → buffer drop diam-diam; H5 over-gating; H6 finalize bergantung jeda. Handoff diperbarui + kewajiban instrumentasi `windows_dropped`/`buffer_dropped_sec` (gap observability: drop tak terukur).
+- Mitigasi runtime disarankan ke user: WHISPER_CPU_THREADS=8 + compose up -d, uji ulang bicara kontinu ≥60s.
