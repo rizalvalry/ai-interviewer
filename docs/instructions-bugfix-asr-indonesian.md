@@ -53,9 +53,14 @@ Kandidat fix yang SUDAH disetujui arah-nya (pilih kombinasi sesuai bukti Fase 1)
 
 ## Verifikasi & acceptance PM
 - [ ] Laporan Fase 1: tabel bukti per hipotesis + confidence.
-- [ ] Eval mini ASR dua bahasa: ≥10 klip ID + ≥10 klip EN + ≥5 klip hening/noise →
+- [ ] Eval mini ASR dua bahasa: ≥10 klip ID (kalimat interview bervariasi — sapaan,
+      jawaban panjang, istilah teknis) + ≥10 klip EN + ≥5 klip hening/noise →
       transkrip benar untuk ID & EN, NOL frasa halusinasi tampil dari klip hening.
-- [ ] "selamat sore" (klip nyata) muncul benar di timeline dengan bahasa `id`.
+- [ ] ≥3 klip **code-switching ID-EN** (mis. "saya implement rate limiter pakai Redis")
+      tertranskrip utuh dan tidak di-drop oleh gating bahasa — ini norma di interview
+      teknis Indonesia, bukan edge case.
+- [ ] "selamat sore" (klip nyata) muncul benar di timeline dengan bahasa `id` —
+      contoh repro, BUKAN batas scope: seluruh ucapan ID harus tertranskrip.
 - [ ] Timeline tidak lagi menampilkan utterance yang di-drop.
 - [ ] Suite test hijau (tambah test untuk gating baru); commit per perubahan, push.
 - [ ] Tag `v0.3.1` (bugfix) — terpisah dari track portfolio (v0.4.0).

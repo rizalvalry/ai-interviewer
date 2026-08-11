@@ -310,3 +310,6 @@ User: serahkan docs/instructions-developer-portfolio-store.md ke claude dev. Tar
 
 ### Next action
 User: (a) coba mitigasi cepat WHISPER_MODEL=small di .env + compose up -d, laporkan hasil "selamat sore"; (b) serahkan docs/instructions-bugfix-asr-indonesian.md ke claude dev. Target tag v0.3.1.
+
+### Update scope [2026-08-11 18:30]
+- User menegaskan: scope = SELURUH ucapan bahasa Indonesia, bukan hanya "selamat sore" (itu contoh repro). Acceptance diperkeras: +klip ID bervariasi eksplisit, +≥3 klip code-switching ID-EN (norma interview teknis, bukan edge case). Handoff sudah diserahkan user ke claude dev — item #1 status delegated aktif.
