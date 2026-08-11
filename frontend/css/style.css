@@ -83,6 +83,9 @@ textarea {
   font: inherit; resize: vertical;
 }
 
+input[type="file"] { width: 100%; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+#portfolioStatus { margin: 0 0 8px; font-size: 12px; }
+
 #suggestion { white-space: pre-wrap; margin-bottom: 18px; }
 
 .metrics {

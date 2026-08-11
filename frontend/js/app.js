@@ -1,5 +1,6 @@
 import { pipe } from './audio-pipeline.js';
 import { EchoDetector } from './echo-detect.js';
+import { extractPdfText } from './pdf-extract.js';
 import { StateMachine } from './state-machine.js';
 import { Timeline } from './timeline.js';
 import { WSManager } from './ws-manager.js';
@@ -201,3 +202,26 @@ $('btnStart').addEventListener('click', startDialog);
 $('btnStop').addEventListener('click', stopDialog);
 $('btnClear').addEventListener('click', () => timeline.clear());
 window.addEventListener('beforeunload', () => { stopDialog(); });
+
+// F-2: extraction is client-side only; the result just fills the existing #portfolio
+// textarea (still editable) — /suggest and its payload shape are unchanged.
+$('portfolioFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // allow re-selecting the same file name after an error
+  if (!file) return;
+
+  const status = $('portfolioStatus');
+  status.textContent = 'Mengekstrak PDF…';
+  status.className = 'muted';
+  try {
+    const { text, truncated, pages } = await extractPdfText(file);
+    $('portfolio').value = text;
+    status.textContent = truncated
+      ? `Diekstrak ${pages} halaman — dipotong ke ${text.length.toLocaleString('id-ID')} karakter.`
+      : `Diekstrak ${pages} halaman.`;
+    status.className = 'ok';
+  } catch (err) {
+    status.textContent = err.message || 'Gagal mengekstrak PDF.';
+    status.className = 'bad';
+  }
+});
