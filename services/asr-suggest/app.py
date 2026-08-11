@@ -14,7 +14,8 @@ import asr
 import auth
 import config
 import suggest
-from filters import dedup_boundary, is_audible
+import translate
+from filters import cap_history, dedup_boundary, is_audible
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,7 @@ class ChannelState:
     buf: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=np.float32))
     last_seq: int = -1
     last_text: str = ""
+    history: list = field(default_factory=list)  # F-1: last 2 final utterances, for translation context
 
 
 @app.get("/health")
@@ -129,6 +131,23 @@ async def suggest_endpoint(req: SuggestRequest):
     return result
 
 
+async def _emit_translation(ws: WebSocket, seq: int, text: str, context: list[str]) -> None:
+    """F-1: fire-and-forget task scheduled from the WS loop. Must never raise into the
+    caller - a translation failure/timeout is a missing side message, not a stream error."""
+    try:
+        result = await translate.ask_translate(text, context)
+    except Exception:
+        log.exception("translate_task_error seq=%d", seq)
+        return
+    if not result.get("ok"):
+        log.warning("translate_skip seq=%d reason=%s", seq, result.get("reason"))
+        return
+    try:
+        await ws.send_json({"type": "translation", "ref_seq": seq, "text_id": result["text"]})
+    except Exception:
+        log.warning("translate_send_failed seq=%d", seq)
+
+
 @app.websocket("/stream")
 async def stream(ws: WebSocket):
     session_id = ws.query_params.get("session", "")
@@ -146,6 +165,11 @@ async def stream(ws: WebSocket):
     window_len = int(config.SR * config.WINDOW_SEC)
     overlap_len = int(config.SR * config.OVERLAP_SEC)
     max_buf = config.SR * config.MAX_BUF_SEC
+    next_utt_seq = 0
+    # asyncio only holds a weak ref to a scheduled task - without keeping a strong ref here,
+    # a translation task can be garbage-collected mid-flight ("Task was destroyed but it is
+    # pending"). The done-callback keeps this set from growing for the life of the connection.
+    bg_tasks: set[asyncio.Task] = set()
     log.info("ws_open session=%s", session_id)
 
     try:
@@ -197,8 +221,12 @@ async def stream(ws: WebSocket):
                 if not text:
                     continue
                 state.last_text = seg["text"]
+                seq = next_utt_seq
+                next_utt_seq += 1
                 await ws.send_json(
                     {
+                        "type": "transcript",
+                        "seq": seq,
                         "ch": CHANNEL_NAMES.get(ch_id, "unknown"),
                         "text": text,
                         "lang": lang,
@@ -210,9 +238,21 @@ async def stream(ws: WebSocket):
                     }
                 )
 
+                # F-1: English only, fire-and-forget, never awaited on the ASR/WS path.
+                if lang == "en" and text.strip():
+                    task = asyncio.create_task(
+                        _emit_translation(ws, seq, text, list(state.history))
+                    )
+                    bg_tasks.add(task)
+                    task.add_done_callback(bg_tasks.discard)
+                state.history = cap_history(state.history, text)
+
     except (WebSocketDisconnect, asyncio.TimeoutError):
         pass
     except Exception:
         log.exception("ws_error session=%s", session_id)
     finally:
+        # Candidate has left - no point paying for translations of utterances no one reads.
+        for t in bg_tasks:
+            t.cancel()
         log.info("ws_close session=%s", session_id)

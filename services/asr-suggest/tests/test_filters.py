@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from filters import dedup_boundary, is_audible, is_repetitive, keep
+from filters import cap_history, dedup_boundary, is_audible, is_repetitive, keep
 
 
 @dataclass
@@ -87,3 +87,22 @@ class TestDedupBoundary:
 
     def test_punctuation_only_token_does_not_desync_indexes(self):
         assert dedup_boundary("bagian satu -", "- bagian dua") == "bagian dua"
+
+
+class TestCapHistory:
+    """F-1 translation context: cap_history(history, text) -> new list, last N kept."""
+
+    def test_appends_when_under_cap(self):
+        assert cap_history([], "a") == ["a"]
+        assert cap_history(["a"], "b") == ["a", "b"]
+
+    def test_drops_oldest_beyond_default_cap_of_two(self):
+        assert cap_history(["a", "b"], "c") == ["b", "c"]
+
+    def test_respects_custom_max_len(self):
+        assert cap_history(["a", "b", "c"], "d", max_len=3) == ["b", "c", "d"]
+
+    def test_does_not_mutate_input_list(self):
+        original = ["a", "b"]
+        cap_history(original, "c")
+        assert original == ["a", "b"]

@@ -64,6 +64,15 @@ def is_repetitive(text: str, max_ratio: float = 0.5) -> bool:
     return (len(set(words)) / len(words)) < max_ratio
 
 
+def cap_history(history: list[str], text: str, max_len: int = 2) -> list[str]:
+    """F-1 translation context: keep only the last `max_len` final utterances per channel.
+
+    Returns a new list (never mutates the input) so callers can hold a stable snapshot to
+    pass into a background translation task while the connection's state moves on.
+    """
+    return (history + [text])[-max_len:]
+
+
 def dedup_boundary(prev_text: str, new_text: str, max_overlap_words: int = 12) -> str:
     """Layer 6: strip the longest prev-suffix that is also a new-prefix.
 
