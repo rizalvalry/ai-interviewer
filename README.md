@@ -53,6 +53,14 @@ Dropdown "Bahasa" di UI (default **Auto**) mengunci `language=` yang dikirim ke 
 seluruh sesi WS — jalan keluar deterministik kalau auto-detect salah tebak pada ucapan pendek.
 Pilih **ID** atau **EN** sebelum menekan Start Dialog bila interview didominasi satu bahasa.
 
+## Indikator audio tertinggal (bug-hunter H4, 2026-08-11)
+
+Kalau inferensi ASR tidak mengejar audio real-time (bicara kontinu di kedua channel
+sekaligus, atau laptop lambat), buffer internal (`MAX_BUF_SEC=30`) pada akhirnya membuang
+audio tertua — sekarang **tidak lagi diam-diam**: banner peringatan muncul di UI dan counter
+`audio_dropped_sec` di footer bertambah setiap kali ini terjadi. Kalau sering muncul: turunkan
+`WHISPER_MODEL` ke `base`, atau kurangi intensitas bicara bersamaan di kedua channel.
+
 ## Mode dev alternatif (tanpa Docker)
 
 `run-dev.ps1` masih tersedia untuk iterasi cepat tanpa build image — lihat komentar di

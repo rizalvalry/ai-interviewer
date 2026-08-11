@@ -30,6 +30,7 @@ let echo = null;
 let suggestTimer = null;
 let sessionToken = null;
 const utterances = [];
+let totalBufferDroppedSec = 0;
 
 // Guide 1 point 5: pay the cold start now, while the user is still reading the page,
 // not at the moment they press Start.
@@ -73,6 +74,18 @@ function setLevel(channel, rms) {
 function onTranscript(msg) {
   if (msg?.type === 'translation') {
     timeline.addTranslation(msg.ref, msg.text);
+    return;
+  }
+  // bug-hunter H4: the backend never silently discards audio without saying so anymore -
+  // surface it immediately rather than leaving the user to notice missing transcript later.
+  if (msg?.type === 'buffer_drop') {
+    totalBufferDroppedSec += msg.dropped_sec || 0;
+    $('mBufferDropped').textContent = totalBufferDroppedSec.toFixed(1);
+    const warn = $('bufferWarn');
+    warn.hidden = false;
+    warn.textContent =
+      `Pipeline tertinggal — ${msg.dropped_sec}s audio channel ${msg.ch} terlewat. ` +
+      `Coba bicara lebih pelan/berjeda, atau turunkan WHISPER_MODEL kalau ini sering terjadi.`;
     return;
   }
   if (!msg?.text) return;

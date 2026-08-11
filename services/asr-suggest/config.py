@@ -12,7 +12,16 @@ DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 
 # ctranslate2 spawns this many threads per inference. Keep threads*concurrency <= cores,
 # otherwise the two inferences fight for the same cores and both miss the latency budget.
-CPU_THREADS = int(os.getenv("WHISPER_CPU_THREADS", "2"))
+#
+# bug-hunter H4 (2026-08-11, confirmed): the old default of 2 was tuned for a 2-vCPU cloud
+# instance (see docs/architecture/deployment-strategy.md) and starves `small` on real
+# hardware - measured 4297ms per 2.0s window (2.15x real-time, i.e. falling behind) on a
+# 32-core box. 8 threads measured best (2602ms, 1.30x) - 16 was WORSE (2936ms), a real
+# scaling ceiling in this backend/model, not a guess. Even at 8 threads the pipeline can
+# still fall behind during sustained fast/continuous speech or when both channels talk at
+# once (measured ~2x slower per call when 2 inferences run concurrently) - this is why
+# METRICS.buffer_dropped_sec below exists: the residual risk is made visible, not hidden.
+CPU_THREADS = int(os.getenv("WHISPER_CPU_THREADS", "8"))
 MAX_CONCURRENT_ASR = int(os.getenv("MAX_CONCURRENT_ASR", "2"))
 
 # Guide 1 targets <1.2s interim but guide 6 only fires once 2.0s has accumulated, so a

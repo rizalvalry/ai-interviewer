@@ -36,6 +36,10 @@ METRICS = {
     "llm_calls": 0,
     "llm_errors": 0,
     "asr_latency_ms_last": 0,
+    # bug-hunter H4 (2026-08-11): before this, the rolling buffer truncation below silently
+    # discarded audio with zero observability - "audio dibuang diam-diam" was invisible.
+    "windows_dropped": 0,
+    "buffer_dropped_sec": 0.0,
 }
 
 
@@ -204,6 +208,14 @@ async def _flush_translation_batch(ws: WebSocket, items: list[dict], context: li
             break  # ws is gone - the rest of the batch has nowhere to go either
 
 
+def _buffer_drop_sec(combined_len: int, max_buf: int, sr: int) -> float | None:
+    """bug-hunter H4: pure math for the rolling-buffer-overflow check, split out so the
+    "audio dibuang diam-diam" detection is unit-testable without a live WS connection."""
+    if combined_len <= max_buf:
+        return None
+    return (combined_len - max_buf) / sr
+
+
 def _normalize_lang_hint(raw: str) -> str | None:
     """UI selector Auto|ID|EN (bug-hunter H3) -> Whisper's language= kwarg. Anything other
     than exactly "id"/"en" (missing, "auto", garbage) falls back to auto-detect - never
@@ -269,6 +281,23 @@ async def stream(ws: WebSocket):
                 task.add_done_callback(bg_tasks.discard)
 
             pcm = np.frombuffer(data[HEADER_BYTES:], dtype=np.int16).astype(np.float32) / 32768.0
+            # bug-hunter H4: when inference falls behind real-time, this buffer keeps
+            # growing until it hits max_buf, at which point the OLDEST audio is silently
+            # cut off - "audio dibuang diam-diam". Surface it instead of hiding it.
+            dropped_sec = _buffer_drop_sec(len(state.buf) + len(pcm), max_buf, config.SR)
+            if dropped_sec is not None:
+                METRICS["windows_dropped"] += 1
+                METRICS["buffer_dropped_sec"] += dropped_sec
+                try:
+                    await ws.send_json(
+                        {
+                            "type": "buffer_drop",
+                            "ch": CHANNEL_NAMES.get(ch_id, "unknown"),
+                            "dropped_sec": round(dropped_sec, 2),
+                        }
+                    )
+                except Exception:
+                    pass  # best-effort UI notice - never let this break the ASR/WS path
             state.buf = np.concatenate([state.buf, pcm])[-max_buf:]
 
             if len(state.buf) < window_len:
