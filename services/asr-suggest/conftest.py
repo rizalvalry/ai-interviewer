@@ -2,8 +2,23 @@ import sys
 from pathlib import Path
 
 import httpx
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
+
+import config
+import portfolio_store
+
+
+@pytest.fixture
+def portfolio_db(tmp_path, monkeypatch):
+    """Isolated SQLite file per test - portfolio_store's connection is a module-level
+    singleton (process lifetime), so it must be reset after repointing PORTFOLIO_DB_PATH or
+    a later test would keep reading/writing a previous test's (possibly deleted) tmp_path."""
+    monkeypatch.setattr(config, "PORTFOLIO_DB_PATH", str(tmp_path / "portfolios.db"))
+    portfolio_store._reset_connection_for_tests()
+    yield
+    portfolio_store._reset_connection_for_tests()
 
 
 class FakeGeminiResponse:

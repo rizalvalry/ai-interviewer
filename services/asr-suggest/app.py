@@ -13,6 +13,7 @@ from pydantic import BaseModel
 import asr
 import auth
 import config
+import portfolio_store
 import suggest
 import translate
 from filters import cap_history, dedup_boundary, is_audible
@@ -130,6 +131,54 @@ async def suggest_endpoint(req: SuggestRequest):
         # Guide 10 point 7: an LLM failure must never look like a transcription failure.
         return JSONResponse(result, status_code=200)
     return result
+
+
+class PortfolioCreateRequest(BaseModel):
+    session: str = ""
+    token: str = ""
+    name: str
+    content: str
+
+
+@app.get("/portfolios")
+async def list_portfolios_endpoint(session: str = "", token: str = ""):
+    ok, reason = auth.verify(session, token)
+    if not ok:
+        raise HTTPException(status_code=401, detail=reason)
+    return await asyncio.to_thread(portfolio_store.list_portfolios)
+
+
+@app.get("/portfolios/{portfolio_id}")
+async def get_portfolio_endpoint(portfolio_id: int, session: str = "", token: str = ""):
+    ok, reason = auth.verify(session, token)
+    if not ok:
+        raise HTTPException(status_code=401, detail=reason)
+    record = await asyncio.to_thread(portfolio_store.get_portfolio, portfolio_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="not-found")
+    return record
+
+
+@app.post("/portfolios")
+async def create_portfolio_endpoint(req: PortfolioCreateRequest):
+    ok, reason = auth.verify(req.session, req.token)
+    if not ok:
+        raise HTTPException(status_code=401, detail=reason)
+    error = portfolio_store.validate(req.name, req.content)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return await asyncio.to_thread(portfolio_store.upsert_portfolio, req.name.strip(), req.content)
+
+
+@app.delete("/portfolios/{portfolio_id}")
+async def delete_portfolio_endpoint(portfolio_id: int, session: str = "", token: str = ""):
+    ok, reason = auth.verify(session, token)
+    if not ok:
+        raise HTTPException(status_code=401, detail=reason)
+    deleted = await asyncio.to_thread(portfolio_store.delete_portfolio, portfolio_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="not-found")
+    return {"ok": True}
 
 
 async def _flush_translation_batch(ws: WebSocket, items: list[dict], context: list[str]) -> None:

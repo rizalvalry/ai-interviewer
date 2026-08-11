@@ -52,3 +52,7 @@ GEMINI_TRANSLATE_MODEL = os.getenv("GEMINI_TRANSLATE_MODEL", "gemini-3.5-flash-l
 GEMINI_TIMEOUT_SEC = float(os.getenv("GEMINI_TIMEOUT_SEC", "15"))
 
 CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "*").split(",") if o]
+
+# ADR Addendum 2026-08-11 (3): riwayat portfolio di SQLite (stdlib), file di named volume
+# (docker-compose.yml) - never a bind-mount into the repo tree, so a CV can never land in git.
+PORTFOLIO_DB_PATH = os.getenv("PORTFOLIO_DB_PATH", "/home/user/data/portfolios.db")
