@@ -1,3 +1,6 @@
+# Alternative dev path (no Docker build/rebuild) for fast iteration on this laptop only.
+# Primary path is `docker compose up` (see README.md) — this script is not the source of
+# truth for how to start the stack, just a quicker inner loop when editing asr-suggest.
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $py = Join-Path $root ".venv\Scripts\python.exe"
