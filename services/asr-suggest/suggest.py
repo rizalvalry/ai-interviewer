@@ -59,7 +59,12 @@ async def ask_claude(
     if not question.strip():
         return {"ok": False, "reason": "empty-question", "text": "Saran tidak tersedia."}
 
-    system: list[dict] = [{"type": "text", "text": SYSTEM_PROMPT}]
+    # cache_control on SYSTEM_PROMPT too (not just portfolio below): when portfolio is empty
+    # there would otherwise be zero cache breakpoints and this always-identical block would
+    # never get the ~0.1x cached-read price on repeat calls within a session.
+    system: list[dict] = [
+        {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+    ]
     if portfolio.strip():
         # Portfolio is resent every turn and never changes within a session.
         system.append(
@@ -86,6 +91,15 @@ async def ask_claude(
                 timeout=config.CLAUDE_TIMEOUT_SEC,
             )
             text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+            u = resp.usage
+            log.info(
+                "claude_usage attempt=%d input=%d output=%d cache_read=%d cache_write=%d",
+                attempt,
+                u.input_tokens,
+                u.output_tokens,
+                getattr(u, "cache_read_input_tokens", None) or 0,
+                getattr(u, "cache_creation_input_tokens", None) or 0,
+            )
             return {"ok": True, "text": text.strip(), "attempt": attempt}
         except asyncio.TimeoutError:
             last_error = "timeout"
