@@ -77,6 +77,7 @@ class ChannelState:
     last_seq: int = -1
     last_text: str = ""
     history: list = field(default_factory=list)  # F-1: last 2 final utterances, for translation context
+    translation_batch: translate.TranslationBatch = field(default_factory=translate.TranslationBatch)
 
 
 @app.get("/health")
@@ -131,21 +132,27 @@ async def suggest_endpoint(req: SuggestRequest):
     return result
 
 
-async def _emit_translation(ws: WebSocket, seq: int, text: str, context: list[str]) -> None:
+async def _flush_translation_batch(ws: WebSocket, items: list[dict], context: list[str]) -> None:
     """F-1: fire-and-forget task scheduled from the WS loop. Must never raise into the
     caller - a translation failure/timeout is a missing side message, not a stream error."""
     try:
-        result = await translate.ask_translate(text, context)
+        result = await translate.ask_translate_batch(items, context)
     except Exception:
-        log.exception("translate_task_error seq=%d", seq)
+        log.exception("translate_task_error batch_size=%d", len(items))
         return
     if not result.get("ok"):
-        log.warning("translate_skip seq=%d reason=%s", seq, result.get("reason"))
+        log.warning("translate_batch_skip batch_size=%d reason=%s", len(items), result.get("reason"))
         return
-    try:
-        await ws.send_json({"type": "translation", "ref_seq": seq, "text_id": result["text"]})
-    except Exception:
-        log.warning("translate_send_failed seq=%d", seq)
+    translations = result["translations"]
+    for it in items:
+        text_id = translations.get(it["seq"])
+        if text_id is None:
+            continue
+        try:
+            await ws.send_json({"type": "translation", "ref": it["seq"], "text": text_id})
+        except Exception:
+            log.warning("translate_send_failed seq=%d", it["seq"])
+            break  # ws is gone - the rest of the batch has nowhere to go either
 
 
 @app.websocket("/stream")
@@ -194,6 +201,16 @@ async def stream(ws: WebSocket):
                 continue
             state.last_seq = seq
 
+            # F-1 batching: checked on every frame, not only when a new segment is produced -
+            # the ~4s ceiling must still fire during a pause with no new transcribed text.
+            if state.translation_batch.should_flush(time.monotonic()):
+                pending = state.translation_batch.drain()
+                task = asyncio.create_task(
+                    _flush_translation_batch(ws, pending, list(state.history))
+                )
+                bg_tasks.add(task)
+                task.add_done_callback(bg_tasks.discard)
+
             pcm = np.frombuffer(data[HEADER_BYTES:], dtype=np.int16).astype(np.float32) / 32768.0
             state.buf = np.concatenate([state.buf, pcm])[-max_buf:]
 
@@ -238,13 +255,10 @@ async def stream(ws: WebSocket):
                     }
                 )
 
-                # F-1: English only, fire-and-forget, never awaited on the ASR/WS path.
+                # F-1: English only, queued for the batcher above - never awaited here, and
+                # Indonesian speech never touches translate.py at all (nol panggilan API).
                 if lang == "en" and text.strip():
-                    task = asyncio.create_task(
-                        _emit_translation(ws, seq, text, list(state.history))
-                    )
-                    bg_tasks.add(task)
-                    task.add_done_callback(bg_tasks.discard)
+                    state.translation_batch.add(seq, text)
                 state.history = cap_history(state.history, text)
 
     except (WebSocketDisconnect, asyncio.TimeoutError):
@@ -255,4 +269,7 @@ async def stream(ws: WebSocket):
         # Candidate has left - no point paying for translations of utterances no one reads.
         for t in bg_tasks:
             t.cancel()
+        dropped = sum(len(s.translation_batch.items) for s in channels.values())
+        if dropped:
+            log.warning("translate_batch_dropped_on_close count=%d", dropped)
         log.info("ws_close session=%s", session_id)
