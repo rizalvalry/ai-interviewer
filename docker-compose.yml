@@ -1,0 +1,24 @@
+services:
+  asr:
+    build:
+      context: ./services/asr-suggest
+    env_file:
+      - .env
+    ports:
+      # Host side MUST stay 127.0.0.1 — the service has no auth beyond ALLOW_DEV_TOKEN's
+      # session token, which is only a safe default while the port is unreachable from LAN.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Whisper model is downloaded on first run (faster-whisper, see asr.py). Naming the
+      # volume keeps the download across `down`/`up` and image rebuilds.
+      - whisper-cache:/home/user/.cache/huggingface
+
+  frontend:
+    image: nginx:alpine
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    ports:
+      - "127.0.0.1:5500:80"
+
+volumes:
+  whisper-cache:
