@@ -276,3 +276,37 @@ User: serahkan docs/instructions-developer-f1-f2.md (versi Gemini) ke claude dev
 
 ### Next action
 User: serahkan docs/instructions-developer-portfolio-store.md ke claude dev. Target tag v0.4.0.
+
+---
+
+## [2026-08-11 18:00] — BUG: ucapan Indonesia tidak tertranskrip; halusinasi frasa pendek EN/DE (live test user)
+
+**Intake class:** Multi-skill (bug-hunter → developer)
+**Status keseluruhan:** `needs-fix`
+**RAG:** 🟡 Amber — residual acceptance v0.3.0 GAGAL untuk jalur bahasa Indonesia; requirement bisnis baru dicatat: percakapan ID setara EN (warga kelas satu)
+**Refs:** #2026-08-11 16:30 (residual live-mic test)
+
+### Gejala
+"selamat sore" tidak muncul; timeline berisi halusinasi "Hello."/"I'm sorry."/"Hallo!"(de)/"Sorry" ber-tag low-conf. Kondisi: WHISPER_MODEL=base, language auto-detect.
+
+### Delegation
+| # | Work item | Owner skill | Subagent (model) | Depends on | DoR | Status |
+|---|-----------|-------------|------------------|-----------|-----|--------|
+| 1 | Diagnosis H1/H2/H3 (bukti, confidence) | bug-hunter | inherits caller | klip audio repro | [x] | delegated (via user → claude dev) |
+| 2 | Fix per temuan (model default, gating halusinasi, selector bahasa) | developer | developer (sonnet) | #1 | [ ] | blocked by #1 |
+
+### Handoff artifacts
+- [x] docs/instructions-bugfix-asr-indonesian.md — hipotesis, prediksi falsifiable, arah fix yang disetujui, acceptance eval ID+EN+hening
+
+### RAID
+- **I (live):** ASR gagal untuk ID → aplikasi belum layak untuk interview berbahasa Indonesia — owner: bug-hunter/developer | due: sebelum pemakaian interview ID nyata.
+- **A:** WHISPER_MODEL=small menyelesaikan sebagian besar H1 — confidence M — user diminta uji mitigasi runtime (.env, tanpa kode) sebagai bukti awal diagnosis.
+- **R:** Fix menurunkan akurasi EN — mitigation: acceptance eval dua bahasa wajib.
+
+### Gate log
+- [x] DoR — 2026-08-11 18:00 (gejala jelas, jalur repro didefinisikan, arah fix disetujui)
+- [ ] DoD — menunggu laporan diagnosis + fix
+- [ ] Go / No-go — No-go untuk interview ID sampai fix diverifikasi. Track portfolio (WI-13..16) jalan paralel, tidak terblokir.
+
+### Next action
+User: (a) coba mitigasi cepat WHISPER_MODEL=small di .env + compose up -d, laporkan hasil "selamat sore"; (b) serahkan docs/instructions-bugfix-asr-indonesian.md ke claude dev. Target tag v0.3.1.
