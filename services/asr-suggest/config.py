@@ -2,7 +2,11 @@ import os
 
 SR = 16000
 
-MODEL_SIZE = os.getenv("WHISPER_MODEL", "base")
+# bug-hunter H1 (2026-08-11, confirmed): `base` measurably mis-hears short/ambiguous
+# Indonesian utterances ("selamat sore" -> "Selamat sori."); `small` gets the same clip right
+# without regressing English (12/12 identical on both in the eval harness). `base` remains
+# selectable via env for lower-CPU laptops - see README for the latency/CPU tradeoff.
+MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE", "int8")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 
@@ -22,7 +26,20 @@ IDLE_TIMEOUT_SEC = int(os.getenv("IDLE_TIMEOUT_SEC", "30"))
 
 ENERGY_GATE_DB = float(os.getenv("ENERGY_GATE_DB", "-45.0"))
 VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))
-LOW_CONF_LOGPROB = float(os.getenv("LOW_CONF_LOGPROB", "-0.7"))
+# bug-hunter RC-1 (2026-08-11): -0.7 was the documented default but never reached keep() -
+# now that asr.py actually wires this in, avg_logprob turned out to be too noisy a signal to
+# split hairs on for this one hard case: re-synthesizing the SAME "selamat sore" text twice
+# gave `small`'s CORRECT output -0.747 and -0.767 (Whisper itself is deterministic per exact
+# audio bytes - the variance is TTS re-render noise, which stands in for real mic-to-mic
+# variance). `base`'s WRONG mis-hear of the same clip scored -0.761/-0.802 - overlapping the
+# correct range, so NO fixed threshold reliably separates them by avg_logprob alone. -0.85
+# stays clear of every correct case observed (worst: -0.767) while still catching clearly
+# catastrophic output (-1.0 and below). The hallucination-phrase gate below (no_speech_prob,
+# a cleaner signal here: 0.015 correct vs 0.122 wrong, 8x apart) is the actual defense for
+# the originally reported "Hello."/"Sorry" fillers - it does not depend on this threshold.
+# Residual, accepted trade-off: `base` may still occasionally show a wrong-but-moderate-
+# confidence SHORT utterance ("selamat sore"-class) - use `small` (default) to avoid it.
+LOW_CONF_LOGPROB = float(os.getenv("LOW_CONF_LOGPROB", "-0.85"))
 
 # Empty secret disables WS auth. Acceptable on localhost only: a public HF Space without
 # this is an open CPU faucet for anyone who finds the URL.

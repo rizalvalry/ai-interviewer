@@ -37,7 +37,13 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: v
   padding: 10px 14px; border-radius: 8px; margin: 12px 0;
 }
 
-.controls { display: flex; gap: 8px; margin: 16px 0; }
+.controls { display: flex; gap: 8px; margin: 16px 0; align-items: center; }
+
+.lang-hint { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.lang-hint select {
+  background: #1e222b; color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 8px; font: inherit;
+}
 
 button {
   background: var(--candidate); color: #fff; border: 0;

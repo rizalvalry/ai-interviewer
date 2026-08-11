@@ -52,7 +52,10 @@ async function getToken() {
 }
 
 function wsUrl(token) {
-  return `${WS_BASE}/stream?session=${SESSION_ID}&token=${encodeURIComponent(token)}`;
+  // bug-hunter H3: Auto|ID|EN selector, sent once at connect time (backend pins Whisper's
+  // language= for the whole session rather than re-detecting per window when not Auto).
+  const lang = $('langHint')?.value || 'auto';
+  return `${WS_BASE}/stream?session=${SESSION_ID}&token=${encodeURIComponent(token)}&lang=${lang}`;
 }
 
 function setChannelStatus(channel, live) {

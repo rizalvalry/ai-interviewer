@@ -204,10 +204,18 @@ async def _flush_translation_batch(ws: WebSocket, items: list[dict], context: li
             break  # ws is gone - the rest of the batch has nowhere to go either
 
 
+def _normalize_lang_hint(raw: str) -> str | None:
+    """UI selector Auto|ID|EN (bug-hunter H3) -> Whisper's language= kwarg. Anything other
+    than exactly "id"/"en" (missing, "auto", garbage) falls back to auto-detect - never
+    error on an unexpected value here, this is a UX nicety, not a trust boundary."""
+    return raw if raw in ("id", "en") else None
+
+
 @app.websocket("/stream")
 async def stream(ws: WebSocket):
     session_id = ws.query_params.get("session", "")
     token = ws.query_params.get("token", "")
+    lang_hint = _normalize_lang_hint(ws.query_params.get("lang", ""))
 
     ok, reason = auth.verify(session_id, token)
     if not ok:
@@ -274,7 +282,9 @@ async def stream(ws: WebSocket):
                 continue
 
             async with asr_lock:
-                segments, lang, stats = await asyncio.to_thread(asr.transcribe_clean, window)
+                segments, lang, stats = await asyncio.to_thread(
+                    asr.transcribe_clean, window, lang_hint
+                )
 
             METRICS["windows_transcribed"] += 1
             METRICS["asr_latency_ms_last"] = stats["asr_latency_ms"]

@@ -40,6 +40,19 @@ disimpan di named volume (`whisper-cache`, lihat `docker-compose.yml`), jadi `do
 down` lalu `up` lagi — atau rebuild image — tidak mengunduh ulang. Volume hanya hilang kalau
 dihapus eksplisit (`docker compose down -v` atau `docker volume rm`).
 
+**Default `WHISPER_MODEL=small`** (sejak bugfix ASR Indonesia 2026-08-11) — `base` terbukti
+salah dengar utterance Indonesia pendek/ambigu (lihat `docs/instructions-bugfix-asr-indonesian.md`).
+`small` lebih akurat tapi lebih berat: kira-kira 2× waktu inferensi & RAM dibanding `base` pada
+CPU yang sama. Kalau laptop tertinggal mengejar audio real-time (interim tersendat, `asr_latency_ms`
+di footer UI terus naik), turunkan ke `WHISPER_MODEL=base` di `.env` lalu `docker compose up -d --build`
+— akurasi ID akan sedikit menurun sebagai trade-off-nya.
+
+## Selector bahasa (Auto | ID | EN)
+
+Dropdown "Bahasa" di UI (default **Auto**) mengunci `language=` yang dikirim ke Whisper untuk
+seluruh sesi WS — jalan keluar deterministik kalau auto-detect salah tebak pada ucapan pendek.
+Pilih **ID** atau **EN** sebelum menekan Start Dialog bila interview didominasi satu bahasa.
+
 ## Mode dev alternatif (tanpa Docker)
 
 `run-dev.ps1` masih tersedia untuk iterasi cepat tanpa build image — lihat komentar di

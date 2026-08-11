@@ -40,7 +40,12 @@ class TestKeep:
 
     @pytest.mark.parametrize(
         "text",
-        ["Terima kasih telah menonton", "thanks for watching!", "Jangan lupa like dan subscribe"],
+        [
+            "Terima kasih telah menonton",
+            "thanks for watching!",
+            "Jangan lupa like dan subscribe",
+            "Terima kasih kerana menonton!",  # gejala #2 screenshot: Malay spelling variant
+        ],
     )
     def test_rejects_blocklisted_hallucination(self, text):
         assert keep(FakeSegment(text)) is False
@@ -53,6 +58,23 @@ class TestKeep:
 
     def test_rejects_high_no_speech_prob(self):
         assert keep(FakeSegment("halo dunia", no_speech_prob=0.9)) is False
+
+
+class TestHallucinationPhrases:
+    """bug-hunter H2 follow-up: known Whisper filler hallucinations, gated on no_speech_prob
+    rather than unconditional - a candidate genuinely saying "sorry" with clear audio must
+    still survive."""
+
+    @pytest.mark.parametrize("text", ["Hello.", "hi", "Hallo!", "Sorry", "I'm sorry.", "Thanks"])
+    def test_drops_known_phrase_when_no_speech_prob_elevated(self, text):
+        assert keep(FakeSegment(text, no_speech_prob=0.4)) is False
+
+    @pytest.mark.parametrize("text", ["Hello.", "Sorry", "I'm sorry."])
+    def test_keeps_known_phrase_when_no_speech_prob_low(self, text):
+        assert keep(FakeSegment(text, no_speech_prob=0.1)) is True
+
+    def test_keeps_unrelated_text_even_with_elevated_no_speech_prob(self):
+        assert keep(FakeSegment("Saya suka kopi pagi ini", no_speech_prob=0.4)) is True
 
 
 class TestIsRepetitive:

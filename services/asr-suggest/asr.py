@@ -42,8 +42,12 @@ def warmup() -> None:
     log.info("warmup_done ms=%d", int((time.perf_counter() - t0) * 1000))
 
 
-def transcribe_clean(audio: np.ndarray) -> tuple[list[dict], str, dict]:
+def transcribe_clean(audio: np.ndarray, language_hint: str | None = None) -> tuple[list[dict], str, dict]:
     """Run one window through Whisper with every anti-hallucination decode setting on.
+
+    language_hint: None = auto-detect (default); "id"/"en" pins the language, bypassing
+    per-window auto-detect entirely - the UI's Auto|ID|EN selector (bug-hunter H3: auto-detect
+    is measurably less stable on short/ambiguous utterances).
 
     Returns (segments, language, stats) where stats counts what each filter layer rejected
     so the UI overlay in guide 9 can show where text is disappearing.
@@ -53,7 +57,7 @@ def transcribe_clean(audio: np.ndarray) -> tuple[list[dict], str, dict]:
 
     segments, info = model.transcribe(
         audio,
-        language=None,
+        language=language_hint,
         temperature=0.0,
         beam_size=1,
         best_of=1,
@@ -75,7 +79,12 @@ def transcribe_clean(audio: np.ndarray) -> tuple[list[dict], str, dict]:
 
     for seg in segments:
         stats["total"] += 1
-        if not keep(seg):
+        # bug-hunter RC-1 (2026-08-11): config.LOW_CONF_LOGPROB was defined but never
+        # reached keep() - the -1.0 default in filters.py was the only threshold ever
+        # actually enforced, so low-confidence hallucinated/mis-heard text (avg_logprob in
+        # [-1.0, -0.7)) always survived to the timeline tagged "low_conf" instead of being
+        # dropped. Passing it through here is the fix.
+        if not keep(seg, config.LOW_CONF_LOGPROB):
             stats["rejected_keep"] += 1
             continue
         if is_repetitive(seg.text):

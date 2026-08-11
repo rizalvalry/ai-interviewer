@@ -12,6 +12,7 @@ import numpy as np
 BLOCKLIST = {
     "terima kasih telah menonton",
     "terima kasih sudah menonton",
+    "terima kasih kerana menonton",  # gejala #2 screenshot: Malay spelling variant slipped through
     "thanks for watching",
     "thank you for watching",
     "subscribe",
@@ -21,7 +22,30 @@ BLOCKLIST = {
     "silakan berlangganan",
 }
 
+# Bug ASR bahasa Indonesia (2026-08-11, bug-hunter Phase 1): klasik Whisper hallucinated
+# fillers on ambiguous/quiet audio - "Hello.", "I'm sorry.", "Hallo!", "Sorry" reported live.
+# Gated on no_speech_prob rather than unconditional (unlike BLOCKLIST above): a candidate
+# legitimately saying "Sorry, could you repeat that?" with clear audio must not be dropped -
+# only when the model is ALSO moderately unsure whether this was speech at all.
+HALLUCINATION_PHRASES = {
+    "hello",
+    "hi",
+    "hallo",
+    "sorry",
+    "i'm sorry",
+    "thank you",
+    "thanks",
+}
+HALLUCINATION_NO_SPEECH_THRESHOLD = 0.3
+
 _PUNCT = re.compile(r"[.,!?;:\"'()\[\]]+")
+
+
+def _is_known_hallucination(text: str, no_speech_prob: float) -> bool:
+    # Only trailing punctuation, not _PUNCT's full strip - "i'm sorry" needs its apostrophe
+    # to match the phrase set below; _PUNCT (shared with dedup_boundary) removes it.
+    normalized = text.strip().lower().rstrip(".,!?")
+    return normalized in HALLUCINATION_PHRASES and no_speech_prob > HALLUCINATION_NO_SPEECH_THRESHOLD
 
 
 def is_audible(pcm: np.ndarray, thresh_db: float = -45.0) -> bool:
@@ -46,11 +70,14 @@ def keep(seg, low_conf_logprob: float = -1.0) -> bool:
     text = (seg.text or "").strip()
     if not text:
         return False
-    if getattr(seg, "no_speech_prob", 0.0) > 0.5:
+    no_speech_prob = getattr(seg, "no_speech_prob", 0.0)
+    if no_speech_prob > 0.5:
         return False
     if getattr(seg, "avg_logprob", 0.0) < low_conf_logprob:
         return False
     if (seg.end - seg.start) < 0.3:
+        return False
+    if _is_known_hallucination(text, no_speech_prob):
         return False
     lowered = text.lower()
     return not any(b in lowered for b in BLOCKLIST)
