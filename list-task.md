@@ -114,7 +114,7 @@
 |---|-----------|-------------|------------------|-----------|-----|--------|
 | 1 | Addendum ADR pivot localhost-first | solution-architect | inherits caller | fakta pricing HF + konfirmasi user | [x] | done |
 | 2 | Instruksi developer (docs/instructions-developer-local.md) | project-manager | — | #1 | [x] | done |
-| 3 | WI-1..5: docker-compose, .env.example, README quickstart, run-dev.ps1, verifikasi | developer | developer (sonnet) | #2 | [x] | **belum didelegasikan — menunggu perintah user** |
+| 3 | WI-1..5: docker-compose, .env.example, README quickstart, run-dev.ps1, verifikasi | developer | developer (sonnet) | #2 | [x] | **done — accepted 2026-08-11** |
 | 4 | WI-6 (opsional): bake model + Docker Hub | developer | developer (sonnet) | #3 diterima | [ ] | deferred |
 
 ### Handoff artifacts required
@@ -134,8 +134,15 @@
 
 ### Gate log
 - [x] DoR untuk delegasi ke developer — 2026-08-11 11:30 (owner tunggal jelas, artefak input lengkap, done condition konkret, model pinned: sonnet)
-- [ ] DoD — menunggu hasil developer (acceptance criteria di instructions-developer-local.md)
-- [ ] Go / No-go — go-live = "clone di laptop lain langsung jalan"; belum dinilai
+- [x] DoD **PASS** — 2026-08-11. Diverifikasi independen oleh PM (bukan hanya laporan): compose binding 127.0.0.1 kedua service, .env ter-gitignore, 22/22 test in-container, smoke 401/403 negatif, 4 commit per-WI ter-push, tag v0.2.0 ter-push. Handoff contract developer lengkap (repo search, impact analysis, assumptions terpisah dari fakta, verification checklist dieksekusi nyata).
+- [x] Go / No-go — **Go untuk pemakaian**. Catatan residual: bukti final portabilitas = setup nyata di laptop kedua (baru disimulasikan via copy-env); bila gagal di sana, itu regresi acceptance.
+
+### Temuan pasca-acceptance (tidak memblokir)
+- **Low:** `ALLOW_INSECURE_NO_AUTH=true` di `.env.example` mematikan guard fail-loud config.py; dengan `AUTH_SECRET` kini default non-kosong, nilai benar = `false`. Akar: instruksi WI-2 PM ditulis dengan asumsi secret kosong. Owner fix: `developer` (satu baris + koreksi komentar), pass berikutnya.
+
+### Status keseluruhan (update 2026-08-11 sore): `done` — kecuali item deferred
+- WI-6 (bake model + Docker Hub): deferred, menunggu keputusan user.
+- Test otomatis auth gate `/suggest` + `/stream` handshake: kandidat `qa-analysis` (gap dicatat developer, smoke manual sudah membuktikan perilaku).
 
 ### Next action
-Delegasikan WI-1..5 ke `developer` (sonnet) dengan input docs/instructions-developer-local.md — menunggu perintah user.
+Keputusan user: (a) kerjakan WI-6 opsional, (b) commission `qa-analysis` untuk test auth gate permanen, atau (c) cukup — pakai stack untuk interview.
