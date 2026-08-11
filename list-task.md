@@ -215,3 +215,6 @@ User: buat API key di console.anthropic.com → isi ke .env. Developer: kerjakan
 
 ### Next action
 User: serahkan docs/instructions-developer-f1-f2.md (versi Gemini) ke claude dev. PM: gate DoD saat laporan masuk.
+
+### Update insiden [2026-08-11 15:45]
+- **I (resolved):** Claude dev menemukan plaintext API key di file lokal `docs/auth/` dan meremediasi (gitignore + hapus). Audit PM atas seluruh riwayat git (`--diff-filter=A`, pencarian string kedua key): file TIDAK PERNAH ter-commit/ter-push — key TIDAK bocor via GitHub. Rotasi karena jalur git tidak diperlukan; anjuran rotasi karena transit chat tetap berlaku (non-blocking). Catatan proses: dev juga sudah mengerjakan WI-11 lama (fix ALLOW_INSECURE_NO_AUTH) — tetap valid di handoff baru.
