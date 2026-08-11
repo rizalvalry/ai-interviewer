@@ -48,9 +48,22 @@
       <div id="suggestion" class="muted">Belum ada pertanyaan.</div>
 
       <h2>Portfolio kandidat</h2>
+
+      <div class="portfolio-picker">
+        <select id="portfolioPicker">
+          <option value="">— pilih dari riwayat —</option>
+        </select>
+        <button id="btnDeletePortfolio" class="ghost" disabled>Hapus</button>
+      </div>
+
       <input type="file" id="portfolioFile" accept="application/pdf" />
       <p id="portfolioStatus" class="muted"></p>
       <textarea id="portfolio" rows="6" placeholder="Ringkasan pengalaman, stack, proyek… (atau upload PDF CV di atas)"></textarea>
+
+      <div class="portfolio-save">
+        <input type="text" id="portfolioName" placeholder="Nama CV (mis. CV-2026-BackendEngineer)" maxlength="100" />
+        <button id="btnSavePortfolio">Simpan ke riwayat</button>
+      </div>
     </aside>
   </main>
 

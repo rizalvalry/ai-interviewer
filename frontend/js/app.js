@@ -216,12 +216,121 @@ $('portfolioFile')?.addEventListener('change', async (e) => {
   try {
     const { text, truncated, pages } = await extractPdfText(file);
     $('portfolio').value = text;
+    if (!$('portfolioName').value.trim()) {
+      $('portfolioName').value = file.name.replace(/\.pdf$/i, '');
+    }
     status.textContent = truncated
       ? `Diekstrak ${pages} halaman — dipotong ke ${text.length.toLocaleString('id-ID')} karakter.`
       : `Diekstrak ${pages} halaman.`;
     status.className = 'ok';
   } catch (err) {
     status.textContent = err.message || 'Gagal mengekstrak PDF.';
+    status.className = 'bad';
+  }
+});
+
+// Riwayat portfolio (ADR Addendum 2026-08-11 (3)): a fresh token is fetched for every
+// portfolio call rather than reusing `sessionToken` (only set once Start Dialog runs, and
+// TOKEN_TTL_SEC=120 could have lapsed by the time the user acts on the picker/save/delete).
+async function loadPortfolioList() {
+  const picker = $('portfolioPicker');
+  try {
+    const token = await getToken();
+    const r = await fetch(`${HTTP_BASE}/portfolios?session=${SESSION_ID}&token=${encodeURIComponent(token)}`);
+    if (!r.ok) throw new Error('list failed');
+    const rows = await r.json();
+    const keep = picker.value;
+    picker.innerHTML = '<option value="">— pilih dari riwayat —</option>';
+    for (const row of rows) {
+      const opt = document.createElement('option');
+      opt.value = row.id;
+      opt.textContent = row.name;
+      picker.appendChild(opt);
+    }
+    picker.value = rows.some((row) => String(row.id) === keep) ? keep : '';
+    $('btnDeletePortfolio').disabled = !picker.value;
+  } catch {
+    // Convenience layer only - a failed list load must never block manual paste or PDF
+    // upload into #portfolio, so this stays silent beyond leaving the dropdown as-is.
+  }
+}
+
+loadPortfolioList();
+
+$('portfolioPicker')?.addEventListener('change', async (e) => {
+  const id = e.target.value;
+  $('btnDeletePortfolio').disabled = !id;
+  if (!id) return;
+
+  const status = $('portfolioStatus');
+  try {
+    const token = await getToken();
+    const r = await fetch(`${HTTP_BASE}/portfolios/${id}?session=${SESSION_ID}&token=${encodeURIComponent(token)}`);
+    if (!r.ok) throw new Error('gagal memuat CV dari riwayat');
+    const record = await r.json();
+    $('portfolio').value = record.content;
+    $('portfolioName').value = record.name;
+    status.textContent = `Dimuat dari riwayat: ${record.name}`;
+    status.className = 'ok';
+  } catch (err) {
+    status.textContent = err.message || 'Gagal memuat dari riwayat.';
+    status.className = 'bad';
+  }
+});
+
+$('btnSavePortfolio')?.addEventListener('click', async () => {
+  const status = $('portfolioStatus');
+  const name = $('portfolioName').value.trim();
+  const content = $('portfolio').value;
+  if (!name) {
+    status.textContent = 'Isi nama CV dulu sebelum menyimpan.';
+    status.className = 'bad';
+    return;
+  }
+  if (!content.trim()) {
+    status.textContent = 'Textarea portfolio masih kosong.';
+    status.className = 'bad';
+    return;
+  }
+  try {
+    const token = await getToken();
+    const r = await fetch(`${HTTP_BASE}/portfolios`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: SESSION_ID, token, name, content }),
+    });
+    if (!r.ok) throw new Error('gagal menyimpan CV ke riwayat');
+    status.textContent = `Tersimpan sebagai "${name}".`;
+    status.className = 'ok';
+    await loadPortfolioList();
+  } catch (err) {
+    status.textContent = err.message || 'Gagal menyimpan.';
+    status.className = 'bad';
+  }
+});
+
+$('btnDeletePortfolio')?.addEventListener('click', async () => {
+  const picker = $('portfolioPicker');
+  const id = picker.value;
+  if (!id) return;
+
+  const status = $('portfolioStatus');
+  try {
+    const token = await getToken();
+    const r = await fetch(
+      `${HTTP_BASE}/portfolios/${id}?session=${SESSION_ID}&token=${encodeURIComponent(token)}`,
+      { method: 'DELETE' }
+    );
+    if (!r.ok) throw new Error('gagal menghapus item riwayat');
+    if ($('portfolioName').value.trim() && picker.selectedOptions[0]?.textContent === $('portfolioName').value.trim()) {
+      $('portfolio').value = '';
+      $('portfolioName').value = '';
+    }
+    status.textContent = 'Item riwayat dihapus.';
+    status.className = 'ok';
+    await loadPortfolioList();
+  } catch (err) {
+    status.textContent = err.message || 'Gagal menghapus.';
     status.className = 'bad';
   }
 });
