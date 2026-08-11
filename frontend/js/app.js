@@ -67,6 +67,10 @@ function setLevel(channel, rms) {
 }
 
 function onTranscript(msg) {
+  if (msg?.type === 'translation') {
+    timeline.addTranslation(msg.ref_seq, msg.text_id);
+    return;
+  }
   if (!msg?.text) return;
   timeline.add(msg);
   utterances.push(msg);
