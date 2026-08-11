@@ -194,3 +194,17 @@ bagian acceptance F-1/F-2.
 `ANTHROPIC_API_KEY` menjadi tidak terpakai. Revisit ke provider berbayar bila: kuota harian
 mulai tertabrak, kualitas saran mengecewakan di pemakaian nyata, atau kebijakan data menjadi
 masalah. Handoff: `docs/instructions-developer-f1-f2.md` (direvisi total untuk Gemini).
+
+---
+
+## Addendum 2026-08-11 (3) — Penyimpanan riwayat portfolio: SQLite + named volume
+
+**Kebutuhan:** portfolio/CV tersimpan, dipilih dari riwayat, tanpa re-upload tiap interview.
+**Keputusan:** SQLite (stdlib `sqlite3`, nol dependency baru) di service asr-suggest, file DB
+di Docker named volume (pola sama dengan `whisper-cache`). Endpoint CRUD dijaga token auth
+yang sama dengan `/suggest`.
+**Ditolak:** localStorage (bukan database; hilang saat clear browser data; terikat 1 browser),
+MySQL/hosted DB (server+kredensial untuk beberapa dokumen teks = overkill; reintroduksi cloud).
+**Sacrifice:** riwayat per-laptop (volume lokal, CV tidak pernah masuk git). Revisit ke hosted
+DB hanya bila kebutuhan sinkron lintas-laptop menjadi nyata.
+**Hand off:** `developer` — docs/instructions-developer-portfolio-store.md.

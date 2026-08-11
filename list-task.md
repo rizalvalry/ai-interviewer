@@ -243,3 +243,36 @@ User: serahkan docs/instructions-developer-f1-f2.md (versi Gemini) ke claude dev
 
 ### Residual (owner: user — satu-satunya yang bisa membuktikan)
 - [ ] Uji live di browser dgn mic asli (http://127.0.0.1:5500): percakapan EN → transkrip + terjemahan ID ≤5s; percakapan ID → tanpa terjemahan; upload CV PDF → saran mengutip CV. Bila ada yang janggal → laporkan, jadi entri needs-fix baru.
+
+---
+
+## [2026-08-11 17:00] — Fitur: riwayat portfolio tersimpan (pilih dari history, tanpa re-upload)
+
+**Intake class:** Multi-skill (solution-architect → developer)
+**Status keseluruhan:** `in-progress`
+**RAG:** 🟢 Green
+**Refs:** #2026-08-11 16:30
+
+### Keputusan (solution-architect, ADR Addendum (3))
+- Storage: SQLite stdlib + Docker named volume (nol dependency baru, pola whisper-cache). Ditolak: localStorage (bukan DB, rapuh), MySQL/hosted (overkill, reintroduksi cloud).
+- Trade-off diterima: riwayat per-laptop; CV tidak pernah masuk git. Revisit hosted DB hanya bila butuh sinkron lintas laptop.
+
+### Delegation
+| # | Work item | Owner skill | Subagent (model) | Depends on | DoR | Status |
+|---|-----------|-------------|------------------|-----------|-----|--------|
+| 1 | Keputusan storage + ADR | solution-architect | inherits caller | kebutuhan user | [x] | done |
+| 2 | Handoff docs/instructions-developer-portfolio-store.md (WI-13..16) | project-manager | — | #1 | [x] | done |
+| 3 | WI-13..16 implementasi | developer | developer (sonnet) | #2 | [x] | delegated (via user → claude dev) |
+
+### RAID
+- **R:** DB file tak sengaja masuk git bila ditaruh di tree repo — mitigation: hard rule volume di luar tree + acceptance "git status bersih".
+- **R:** Endpoint portfolio tanpa auth — mitigation: hard rule auth.verify di semua endpoint + acceptance 401.
+- **A:** Single-user, konkurensi tulis rendah — confidence H — sqlite tanpa pooling cukup.
+
+### Gate log
+- [x] DoR delegasi developer — 2026-08-11 17:00
+- [ ] DoD — menunggu laporan (acceptance criteria di instructions-developer-portfolio-store.md)
+- [ ] Go / No-go — belum
+
+### Next action
+User: serahkan docs/instructions-developer-portfolio-store.md ke claude dev. Target tag v0.4.0.
