@@ -1,6 +1,14 @@
 export class WSManager {
-  constructor(url, { onMessage, onStateChange } = {}) {
-    this.url = url;
+  /**
+   * urlOrFactory: either a static ws:// string OR an async () => string factory.
+   * A factory is called on EVERY open() — including reconnects — so the token it
+   * returns is always fresh.  Pass a factory when TOKEN_TTL_SEC < expected session
+   * duration; pass a string only for very short-lived connections (tests, etc.).
+   */
+  constructor(urlOrFactory, { onMessage, onStateChange } = {}) {
+    this._urlFactory = typeof urlOrFactory === 'function'
+      ? urlOrFactory
+      : () => Promise.resolve(urlOrFactory);
     this.onMessage = onMessage;
     this.onStateChange = onStateChange;
     this.q = [];
@@ -12,9 +20,20 @@ export class WSManager {
     this.open();
   }
 
-  open() {
+  async open() {
     if (this.closed) return;
-    this.ws = new WebSocket(this.url);
+    let url;
+    try {
+      url = await this._urlFactory();
+    } catch (err) {
+      // Token fetch failed (server unreachable, etc.) — back off and retry.
+      if (this.closed) return;
+      this.onStateChange?.('error');
+      const delay = Math.min(1000 * 2 ** this.retry++, 10000);
+      this.timer = setTimeout(() => this.open(), delay);
+      return;
+    }
+    this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {

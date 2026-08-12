@@ -84,9 +84,24 @@ def keep(seg, low_conf_logprob: float = -1.0) -> bool:
 
 
 def is_repetitive(text: str, max_ratio: float = 0.5) -> bool:
-    """Layer 5: a stuck decoder emits the same few words on loop."""
+    """Layer 5: a stuck decoder emits the same few words on loop.
+
+    Also catches single-token character-level repetition (e.g. "μρδδδδδδδ…" seen
+    when Whisper hallucinates on ambiguous audio at the start of a session): if the
+    text has almost no character-level diversity relative to its length it's almost
+    certainly a stuck decoder, not real speech.
+    """
     words = _norm_words(text)
     if len(words) < 6:
+        # Single-token hallucination check: very long "word" with near-zero char diversity.
+        # Threshold: unique_chars / total_chars < 0.15 AND length > 20.
+        # "μρδδδδδδδδδδδδδδδδδδδδδδδδ" → 3 unique / 26 total = 0.115 → caught.
+        # "selamat sore" (12 chars, 10 unique) → 0.83 → not caught.
+        stripped = text.strip()
+        if len(stripped) > 20:
+            diversity = len(set(stripped.lower())) / len(stripped)
+            if diversity < 0.15:
+                return True
         return False
     return (len(set(words)) / len(words)) < max_ratio
 

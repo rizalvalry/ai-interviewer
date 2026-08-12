@@ -87,6 +87,19 @@ class TestIsRepetitive:
     def test_normal_sentence_passes(self):
         assert is_repetitive("saya membangun sistem pembayaran untuk aplikasi mobile") is False
 
+    def test_single_token_char_repetition_is_caught(self):
+        # "μρδδδδδδδδδδδδδδδδδδδδδδδδ" — Whisper hallucination seen at session start
+        # (ambiguous audio → stuck decoder produces repeated non-Latin chars).
+        assert is_repetitive("μρδδδδδδδδδδδδδδδδδδδδδδδδ") is True
+
+    def test_short_repeated_char_token_not_flagged(self):
+        # Short enough to be a real word (≤20 chars) — do not over-trigger.
+        assert is_repetitive("δδδδδ") is False
+
+    def test_normal_indonesian_id_not_flagged(self):
+        # A single normal word must not be caught by char-diversity gate.
+        assert is_repetitive("selamat") is False
+
 
 class TestDedupBoundary:
     def test_no_overlap_returns_new_text_unchanged(self):

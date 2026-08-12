@@ -53,7 +53,12 @@ LOW_CONF_LOGPROB = float(os.getenv("LOW_CONF_LOGPROB", "-0.85"))
 # Empty secret disables WS auth. Acceptable on localhost only: a public HF Space without
 # this is an open CPU faucet for anyone who finds the URL.
 AUTH_SECRET = os.getenv("AUTH_SECRET", "")
-TOKEN_TTL_SEC = int(os.getenv("TOKEN_TTL_SEC", "120"))
+# 120 s caused permanent channel death on interviews > 2 min: WS reconnect with
+# expired token -> backend 4401 -> WSManager stops retrying but channel stays DEAD.
+# 7200 (2 h) covers any real interview session at localhost where the security
+# trade-off is acceptable. WSManager also fetches a fresh token on every reconnect
+# as a second layer of defence (ws-manager.js factory pattern).
+TOKEN_TTL_SEC = int(os.getenv("TOKEN_TTL_SEC", "7200"))
 
 # GET /dev/token mints a valid session token with no login check - it's a stand-in for the
 # Laravel issuer that doesn't exist yet. Even with AUTH_SECRET set, a public Space leaves

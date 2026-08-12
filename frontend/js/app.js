@@ -159,12 +159,15 @@ async function startDialog() {
     sysStream.getVideoTracks().forEach((t) => t.stop());   // only the audio is needed
 
     sm.transition('CONNECTING');
-    const token = await getToken();
-    wsCandidate = new WSManager(wsUrl(token), {
+    // Pass a factory so every reconnect fetches a fresh token — if the session
+    // outlives TOKEN_TTL_SEC the old token would be rejected (4401) and the
+    // channel would go permanently DEAD (ws_reconnects spam + frames dropped).
+    const wsUrlFactory = () => getToken().then((t) => wsUrl(t));
+    wsCandidate = new WSManager(wsUrlFactory, {
       onMessage: onTranscript,
       onStateChange: (s) => setChannelStatus('candidate', s === 'open'),
     });
-    wsInterviewer = new WSManager(wsUrl(token), {
+    wsInterviewer = new WSManager(wsUrlFactory, {
       onMessage: onTranscript,
       onStateChange: (s) => setChannelStatus('interviewer', s === 'open'),
     });
