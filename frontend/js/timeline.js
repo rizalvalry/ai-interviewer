@@ -55,33 +55,42 @@ export class Timeline {
   }
 
   render(e) {
-    const row = document.createElement('div');
-    row.className = `utt utt--${e.ch}${e.low_conf ? ' utt--low' : ''}`;
+    // Bubble wrapper: full-width, aligned by speaker (candidate=left, interviewer=right)
+    const wrap = document.createElement('div');
+    wrap.className = `utt-wrap utt-wrap--${e.ch}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = `utt utt--${e.ch}${e.low_conf ? ' utt--low' : ''}`;
     if (e.seq != null) {
-      row.dataset.seq = e.seq;
-      this.rowsBySeq.set(e.seq, row);
+      bubble.dataset.seq = e.seq;
+      this.rowsBySeq.set(e.seq, bubble);
     }
 
+    // Speaker label + meta on one line above the text
+    const header = document.createElement('div');
+    header.className = 'utt__header';
     const who = document.createElement('span');
     who.className = 'utt__who';
     who.textContent = e.ch === 'candidate' ? 'Kandidat' : 'Interviewer';
-
-    const textCol = document.createElement('span');
-    textCol.className = 'utt__text';
-    const text = document.createElement('span');
-    text.textContent = e.text;
-    const translation = document.createElement('span');
-    translation.className = 'utt__translation';
-    translation.hidden = true;
-    textCol.append(text, translation);
-    row._translationEl = translation;
-
     const meta = document.createElement('span');
     meta.className = 'utt__meta';
     meta.textContent = `${e.lang || '?'}${e.low_conf ? ' · low-conf' : ''}`;
+    header.append(who, meta);
 
-    row.append(who, textCol, meta);
-    return row;
+    // Main transcript text
+    const text = document.createElement('p');
+    text.className = 'utt__text';
+    text.textContent = e.text;
+
+    // Translation appears below main text when available (F-1)
+    const translation = document.createElement('p');
+    translation.className = 'utt__translation';
+    translation.hidden = true;
+    bubble._translationEl = translation;
+
+    bubble.append(header, text, translation);
+    wrap.append(bubble);
+    return wrap;
   }
 
   _applyTranslation(refSeq, textId) {

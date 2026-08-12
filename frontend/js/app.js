@@ -27,8 +27,6 @@ let wsCandidate = null;
 let wsInterviewer = null;
 let nodes = [];
 let echo = null;
-let suggestTimer = null;
-let sessionToken = null;
 const utterances = [];
 let totalBufferDroppedSec = 0;
 
@@ -94,39 +92,56 @@ function onTranscript(msg) {
   if (utterances.length > 50) utterances.shift();
   $('mAsr').textContent = msg.asr_latency_ms ?? '–';
 
-  // Guide 7: only the interviewer's finals trigger Claude, and only after they stop talking.
+  // Enable Smart Answer button once the interviewer has said something.
   if (msg.ch === 'interviewer' && msg.final) {
-    clearTimeout(suggestTimer);
-    suggestTimer = setTimeout(() => requestSuggestion(msg), 800);
+    $('btnSmartAnswer').disabled = false;
   }
 }
 
-async function requestSuggestion(msg) {
+async function requestSuggestion() {
+  // Find the most recent interviewer utterance to use as the question.
+  const lastInterviewer = [...utterances].reverse().find((u) => u.ch === 'interviewer' && u.final);
+  if (!lastInterviewer) {
+    $('suggestion').textContent = 'Belum ada pertanyaan interviewer di timeline.';
+    $('suggestion').className = 'muted';
+    return;
+  }
+
   const box = $('suggestion');
   box.textContent = 'Menyiapkan saran…';
+  box.className = 'muted';
+  const btn = $('btnSmartAnswer');
+  btn.disabled = true;
+  btn.textContent = 'Memproses…';
+
   const t0 = performance.now();
   try {
+    // Always fetch a fresh token — the session token (set at WS-connect time) may have
+    // expired by TOKEN_TTL_SEC=120 before the user decides to press Smart Answer.
+    const token = await getToken();
     const r = await fetch(`${HTTP_BASE}/suggest`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session: SESSION_ID,
-        token: sessionToken,
-        question: msg.text,
-        utterances: utterances.slice(-6),
+        token,
+        question: lastInterviewer.text,
+        utterances: utterances.slice(-8),
         portfolio: $('portfolio').value,
-        low_confidence: !!msg.low_conf,
+        low_confidence: !!lastInterviewer.low_conf,
       }),
     });
     const j = await r.json();
     box.textContent = j.text || 'Saran tidak tersedia.';
     box.className = j.ok ? '' : 'muted';
   } catch {
-    // Transcription must survive Claude being down (guide 10 point 7).
+    // Transcription must survive the LLM being down (guide 10 point 7).
     box.textContent = 'Saran tidak tersedia.';
     box.className = 'muted';
   }
   $('mClaude').textContent = Math.round(performance.now() - t0);
+  btn.disabled = false;
+  btn.textContent = 'Smart Answer ✦';
 }
 
 async function startDialog() {
@@ -145,7 +160,6 @@ async function startDialog() {
 
     sm.transition('CONNECTING');
     const token = await getToken();
-    sessionToken = token;
     wsCandidate = new WSManager(wsUrl(token), {
       onMessage: onTranscript,
       onStateChange: (s) => setChannelStatus('candidate', s === 'open'),
@@ -199,7 +213,6 @@ async function stopDialog() {
   wsCandidate = wsInterviewer = null;
   nodes = [];
   echo = null;
-  sessionToken = null;
   setChannelStatus('candidate', false);
   setChannelStatus('interviewer', false);
 
@@ -216,7 +229,14 @@ setInterval(() => {
 
 $('btnStart').addEventListener('click', startDialog);
 $('btnStop').addEventListener('click', stopDialog);
-$('btnClear').addEventListener('click', () => timeline.clear());
+$('btnClear').addEventListener('click', () => {
+  timeline.clear();
+  utterances.length = 0;
+  $('btnSmartAnswer').disabled = true;
+  $('suggestion').textContent = 'Tekan "Smart Answer" setelah interviewer bertanya.';
+  $('suggestion').className = 'muted';
+});
+$('btnSmartAnswer').addEventListener('click', requestSuggestion);
 window.addEventListener('beforeunload', () => { stopDialog(); });
 
 // F-2: extraction is client-side only; the result just fills the existing #portfolio

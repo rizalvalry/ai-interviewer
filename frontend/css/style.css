@@ -67,20 +67,34 @@ main { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
 
 .pane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
 
-.timeline { height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.timeline { height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
 
+/* Wrapper controls which side of the timeline the bubble sits on */
+.utt-wrap { display: flex; }
+.utt-wrap--candidate  { justify-content: flex-start; }
+.utt-wrap--interviewer { justify-content: flex-end; }
+
+/* Bubble: max 78% wide so there's breathing room on the opposite side */
 .utt {
-  display: grid; grid-template-columns: 92px 1fr auto; gap: 10px;
-  padding: 8px 10px; border-radius: 8px; background: #1e222b;
+  max-width: 78%; min-width: 160px;
+  padding: 10px 14px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 6px;
 }
-.utt--candidate { border-left: 3px solid var(--candidate); }
-.utt--interviewer { border-left: 3px solid var(--interviewer); }
+.utt--candidate  { background: #1a2540; border-left: 3px solid var(--candidate); border-radius: 4px 12px 12px 12px; }
+.utt--interviewer { background: #2a1a10; border-right: 3px solid var(--interviewer); border-radius: 12px 4px 12px 12px; }
 .utt--low { opacity: .65; font-style: italic; }
-.utt__who { font-size: 12px; font-weight: 700; color: var(--muted); }
-.utt__meta { font-size: 11px; color: var(--muted); }
 
-.utt__text { display: flex; flex-direction: column; gap: 2px; }
-.utt__translation { color: var(--muted); font-style: italic; font-size: 13px; }
+.utt__header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.utt__who  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.utt--candidate  .utt__who { color: #93c5fd; }
+.utt--interviewer .utt__who { color: #fdba74; }
+.utt__meta { font-size: 10px; color: var(--muted); }
+
+/* Main transcript line — generous font, no truncation */
+.utt__text { margin: 0; font-size: 15px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+
+/* F-1 translation sits just below the original */
+.utt__translation { margin: 0; font-size: 13px; color: var(--muted); font-style: italic; }
 .utt__translation[hidden] { display: none; }
 
 textarea {
@@ -102,6 +116,15 @@ input[type="file"] { width: 100%; margin-bottom: 6px; font-size: 13px; color: va
   flex: 1; background: #1e222b; color: var(--text);
   border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit;
 }
+
+.suggest-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.suggest-header h2 { margin: 0; }
+
+.btn-smart {
+  background: #7c3aed; font-size: 13px; padding: 6px 12px; border-radius: 8px;
+  white-space: nowrap;
+}
+.btn-smart:disabled { opacity: .4; cursor: not-allowed; }
 
 #suggestion { white-space: pre-wrap; margin-bottom: 18px; }
 
