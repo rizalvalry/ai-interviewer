@@ -191,8 +191,18 @@ async function startDialog() {
       await pipe(sysStream, 'interviewer', wsInterviewer, ctx, setLevel),
     ];
 
-    micStream.getAudioTracks()[0].onended = () => sm.transition('ERROR', 'mic-ended');
-    sysStream.getAudioTracks()[0].onended = () => sm.transition('ERROR', 'display-ended');
+    // Guarded: stopDialog() also stops these tracks intentionally, which fires this same
+    // 'ended' event - without the guard, a deliberate stop races into an ERROR transition
+    // AFTER stopDialog has already moved on, leaving the state machine stuck (bug-hunter,
+    // 2026-08-12).
+    micStream.getAudioTracks()[0].onended = () => {
+      if (!sm.is('LIVE', 'RECONNECTING')) return;
+      sm.transition('ERROR', 'mic-ended');
+    };
+    sysStream.getAudioTracks()[0].onended = () => {
+      if (!sm.is('LIVE', 'RECONNECTING')) return;
+      sm.transition('ERROR', 'display-ended');
+    };
 
     sm.transition('LIVE');
   } catch (err) {
@@ -205,11 +215,14 @@ async function stopDialog() {
   if (sm.is('IDLE', 'STOPPED')) return;
   sm.transition('STOPPING');
 
+  // Detach onended before stopping tracks - a deliberate stop must not also fire the
+  // 'ended' handler (the state-based guard on the handler already covers this, but
+  // detaching first is the more direct fix and matches the handoff's Fix 1).
+  [micStream, sysStream].forEach((s) => s?.getAudioTracks().forEach((t) => { t.onended = null; }));
   [micStream, sysStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
   nodes.forEach(({ node, src }) => { try { src.disconnect(); node.disconnect(); } catch {} });
   wsCandidate?.close();
   wsInterviewer?.close();
-  clearTimeout(suggestTimer);
   if (ctx && ctx.state !== 'closed') await ctx.close();   // releases the audio hardware
 
   micStream = sysStream = ctx = null;

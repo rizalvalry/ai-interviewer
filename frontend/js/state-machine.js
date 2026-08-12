@@ -9,7 +9,10 @@ const TRANSITIONS = {
   RECONNECTING: ['LIVE', 'STOPPING', 'ERROR'],
   STOPPING: ['STOPPED', 'ERROR'],
   STOPPED: ['IDLE'],
-  ERROR: ['IDLE', 'STOPPING'],
+  // REQUESTING_MIC included as a last-resort safety net (bug-hunter, 2026-08-12): if some
+  // future path reaches ERROR without a clean STOPPING->IDLE unwind, Start must still be
+  // clickable rather than requiring a page reload.
+  ERROR: ['IDLE', 'STOPPING', 'REQUESTING_MIC'],
 };
 
 export class StateMachine {
