@@ -303,8 +303,21 @@ async def stream(ws: WebSocket):
             if len(state.buf) < window_len:
                 continue
 
-            window = state.buf
-            state.buf = state.buf[-overlap_len:].copy()
+            # bug-hunter H4 root-fix (2026-08-12): the original `window = state.buf` used
+            # the ENTIRE buffer (up to MAX_BUF_SEC=30s) as one Whisper call.  When inference
+            # is slower than real-time (1.3x at 8 threads / model=small) the buffer grows
+            # each cycle: 2s→2.6s→3.4s→…→30s, making each call proportionally slower and
+            # creating a runaway positive-feedback loop.  A 30s window takes ~39s to
+            # transcribe, during which another 30s of audio fills the buffer, which then
+            # also overflows and loses audio silently.
+            #
+            # Fix: always slice exactly WINDOW_SEC of audio.  After the slice, keep the
+            # tail starting at (window_len - overlap_len) so the overlap is preserved while
+            # the REST of the buffer (if the pipeline is catching up from a backlog) stays
+            # in state.buf and is processed on the NEXT loop iteration without being dropped.
+            # This bounds inference latency at ~WINDOW_SEC regardless of backlog depth.
+            window = state.buf[:window_len]
+            state.buf = state.buf[window_len - overlap_len:]
 
             if not is_audible(window, config.ENERGY_GATE_DB):
                 METRICS["windows_gated_silent"] += 1
