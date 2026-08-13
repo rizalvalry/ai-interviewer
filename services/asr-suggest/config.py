@@ -30,6 +30,16 @@ MAX_CONCURRENT_ASR = int(os.getenv("MAX_CONCURRENT_ASR", "2"))
 WINDOW_SEC = float(os.getenv("WINDOW_SEC", "2.0"))
 OVERLAP_SEC = float(os.getenv("OVERLAP_SEC", "0.5"))
 
+# WI-B5 (audit v0.3.2): app.py slices state.buf[window_len - overlap_len :] every cycle. A
+# misconfigured env with OVERLAP_SEC >= WINDOW_SEC makes that slice index negative, which
+# Python silently interprets as "count from the end" - the buffer never shrinks and grows
+# without bound, and every ASR call gets slower until the pipeline effectively hangs.
+if OVERLAP_SEC >= WINDOW_SEC:
+    raise ValueError(
+        f"OVERLAP_SEC ({OVERLAP_SEC}) harus lebih kecil dari WINDOW_SEC ({WINDOW_SEC}). "
+        "Periksa nilai env OVERLAP_SEC dan WINDOW_SEC."
+    )
+
 MAX_BUF_SEC = int(os.getenv("MAX_BUF_SEC", "30"))
 IDLE_TIMEOUT_SEC = int(os.getenv("IDLE_TIMEOUT_SEC", "30"))
 
