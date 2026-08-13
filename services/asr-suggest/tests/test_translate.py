@@ -58,7 +58,44 @@ class TestAskTranslateBatchGuards:
         assert result == {"ok": False, "reason": "empty-batch"}
 
 
+def test_build_batch_content_puts_context_before_seq_lines():
+    content = translate._build_batch_content(
+        [{"seq": 0, "text": "hi"}], ["previous turn one", "previous turn two"]
+    )
+    context_pos = content.index("previous turn one")
+    seq_pos = content.index("[seq=0]")
+    assert context_pos < seq_pos
+    assert "previous turn two" in content
+
+
 class TestAskTranslateBatchErrorMapping:
+    def test_timeout_then_success_on_retry(self, monkeypatch):
+        monkeypatch.setattr(config, "GEMINI_API_KEY", "some-key")
+        calls = {"n": 0}
+
+        async def fake_post(self, url, params=None, json=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise httpx.TimeoutException("timed out")
+            return FakeGeminiResponse(
+                200,
+                {"candidates": [{"content": {"parts": [{"text": '[{"seq": 0, "text": "halo"}]'}]}}]},
+            )
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+        result = asyncio.run(translate.ask_translate_batch([{"seq": 0, "text": "hi"}], []))
+        assert result == {"ok": True, "translations": {0: "halo"}}
+
+    def test_timeout_on_both_attempts_returns_timeout(self, monkeypatch):
+        monkeypatch.setattr(config, "GEMINI_API_KEY", "some-key")
+
+        async def fake_post(self, url, params=None, json=None):
+            raise httpx.TimeoutException("timed out")
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+        result = asyncio.run(translate.ask_translate_batch([{"seq": 0, "text": "hi"}], []))
+        assert result == {"ok": False, "reason": "timeout"}
+
     def test_http_429_maps_to_quota(self, monkeypatch):
         monkeypatch.setattr(config, "GEMINI_API_KEY", "some-key")
 

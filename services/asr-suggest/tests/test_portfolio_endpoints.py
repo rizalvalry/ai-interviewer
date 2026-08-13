@@ -83,3 +83,21 @@ class TestValidTokenReachesStore:
         with pytest.raises(HTTPException) as exc:
             _run(app.get_portfolio_endpoint(portfolio_id=999, session="s", token=token))
         assert exc.value.status_code == 404
+
+    def test_delete_existing_portfolio_returns_ok(self, monkeypatch, portfolio_db):
+        monkeypatch.setattr(config, "AUTH_SECRET", "test-secret")
+        token = auth.issue("s")
+        created = _run(
+            app.create_portfolio_endpoint(
+                app.PortfolioCreateRequest(session="s", token=token, name="CV-A", content="isi")
+            )
+        )
+        result = _run(app.delete_portfolio_endpoint(portfolio_id=created["id"], session="s", token=token))
+        assert result == {"ok": True}
+
+    def test_delete_missing_id_is_404(self, monkeypatch, portfolio_db):
+        monkeypatch.setattr(config, "AUTH_SECRET", "test-secret")
+        token = auth.issue("s")
+        with pytest.raises(HTTPException) as exc:
+            _run(app.delete_portfolio_endpoint(portfolio_id=999, session="s", token=token))
+        assert exc.value.status_code == 404
