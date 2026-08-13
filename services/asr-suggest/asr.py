@@ -34,12 +34,33 @@ def load() -> WhisperModel:
 
 def warmup() -> None:
     """transcribe() returns a lazy generator; the guide never consumes it, so its warmup
-    does no actual work and the first real request still pays JIT + allocation cost."""
+    does no actual work and the first real request still pays JIT + allocation cost.
+
+    WI-B6 (audit v0.3.2): ctranslate2 does JIT tensor-shape allocation per input size. The
+    old 1s dummy warmed a shape that transcribe_clean() never actually calls with (real
+    windows are WINDOW_SEC long, with VAD filtering on) - the FIRST real window of every
+    session still paid the JIT cost the warmup was supposed to absorb.
+    """
     model = load()
     t0 = time.perf_counter()
-    segments, _ = model.transcribe(np.zeros(config.SR, dtype=np.float32))
+    dummy = np.zeros(int(config.SR * config.WINDOW_SEC), dtype=np.float32)
+    segments, _ = model.transcribe(
+        dummy,
+        temperature=0.0,
+        beam_size=1,
+        vad_filter=True,
+        vad_parameters=dict(
+            min_silence_duration_ms=500,
+            speech_pad_ms=200,
+            threshold=config.VAD_THRESHOLD,
+        ),
+    )
     list(segments)
-    log.info("warmup_done ms=%d", int((time.perf_counter() - t0) * 1000))
+    log.info(
+        "warmup_done ms=%d window_sec=%.1f",
+        int((time.perf_counter() - t0) * 1000),
+        config.WINDOW_SEC,
+    )
 
 
 def transcribe_clean(audio: np.ndarray, language_hint: str | None = None) -> tuple[list[dict], str, dict]:
