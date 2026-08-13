@@ -15,6 +15,23 @@ services:
       # Portfolio history (portfolio_store.py, ADR Addendum 2026-08-11 (3)) - a named volume,
       # never a bind-mount into the repo tree, so a CV can never end up tracked by git.
       - portfolio-data:/home/user/data
+    # WI-C1 (audit v0.3.2): survive an unexpected crash or a host/Docker Desktop reboot
+    # without requiring a manual `docker compose up` - "unless-stopped" still honors an
+    # explicit `docker compose down`/`stop`, so this doesn't fight the on-demand usage model.
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "8.0"
+    healthcheck:
+      # python, not curl: python:3.11-slim doesn't ship curl and adding it via apt is a new
+      # system dependency for a one-line check the already-present interpreter can do alone.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 90s   # Whisper `small` load + warmup can take ~60-90s on first run
 
   frontend:
     image: nginx:alpine
@@ -22,6 +39,10 @@ services:
       - ./frontend:/usr/share/nginx/html:ro
     ports:
       - "127.0.0.1:5500:80"
+    restart: unless-stopped
+    depends_on:
+      asr:
+        condition: service_healthy
 
 volumes:
   whisper-cache:
