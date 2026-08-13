@@ -22,6 +22,24 @@ Aturan:
   dimasukkan ke keluaran.
 - Jangan menambah, mengurangi, atau menafsirkan di luar isi ucapan aslinya."""
 
+# WI-B2 (audit v0.3.2): separate singleton from suggest.py's - different service, different
+# lifecycle, no reason to share a connection pool between two logically distinct clients.
+_http_client: httpx.AsyncClient | None = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=config.GEMINI_TIMEOUT_SEC)
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client and not _http_client.is_closed:
+        await _http_client.aclose()
+        _http_client = None
+
 
 class TranslationBatch:
     """F-1 batching (proteksi kuota harian free tier): kumpulkan utterance EN final sampai
@@ -78,27 +96,39 @@ async def ask_translate_batch(items: list[dict], context: list[str]) -> dict:
     }
     url = GEMINI_URL.format(model=config.GEMINI_TRANSLATE_MODEL)
 
-    try:
-        async with httpx.AsyncClient(timeout=config.GEMINI_TIMEOUT_SEC) as client:
+    # WI-B8 (audit v0.3.2): suggest.py already retries once; this had zero attempts, so one
+    # transient network blip threw away an entire batch of subtitles. Retry only on timeout
+    # (a request that plausibly never reached Gemini) - not on 429 (retrying just burns more
+    # quota against the same limit) and not on a bad/unparseable response (retrying an
+    # already-answered request wastes a call without fixing a malformed reply).
+    for attempt in (1, 2):
+        try:
+            client = get_http_client()
             resp = await client.post(url, params={"key": config.GEMINI_API_KEY}, json=body)
-    except httpx.TimeoutException:
-        log.warning("translate_timeout batch_size=%d", len(items))
-        return {"ok": False, "reason": "timeout"}
-    except Exception as exc:
-        log.warning("translate_error batch_size=%d err=%s", len(items), exc)
-        return {"ok": False, "reason": type(exc).__name__}
+        except httpx.TimeoutException:
+            log.warning("translate_timeout batch_size=%d attempt=%d", len(items), attempt)
+            if attempt == 2:
+                return {"ok": False, "reason": "timeout"}
+            continue
+        except Exception as exc:
+            log.warning("translate_error batch_size=%d attempt=%d err=%s", len(items), attempt, exc)
+            return {"ok": False, "reason": type(exc).__name__}
 
-    if resp.status_code == 429:
-        log.warning("translate_quota batch_size=%d", len(items))
-        return {"ok": False, "reason": "quota"}
+        if resp.status_code == 429:
+            log.warning("translate_quota batch_size=%d attempt=%d", len(items), attempt)
+            return {"ok": False, "reason": "quota"}
 
-    try:
-        resp.raise_for_status()
-        data = resp.json()
-        raw = data["candidates"][0]["content"]["parts"][0]["text"]
-        parsed = json.loads(raw)
-        translations = {int(o["seq"]): o["text"] for o in parsed}
-        return {"ok": True, "translations": translations}
-    except Exception as exc:
-        log.warning("translate_bad_response batch_size=%d err=%s", len(items), exc)
-        return {"ok": False, "reason": "bad-response"}
+        try:
+            resp.raise_for_status()
+            data = resp.json()
+            raw = data["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = json.loads(raw)
+            translations = {int(o["seq"]): o["text"] for o in parsed}
+            return {"ok": True, "translations": translations}
+        except Exception as exc:
+            log.warning(
+                "translate_bad_response batch_size=%d attempt=%d err=%s", len(items), attempt, exc
+            )
+            return {"ok": False, "reason": "bad-response"}
+
+    return {"ok": False, "reason": "timeout"}  # unreachable in practice, satisfies type checkers
