@@ -9,6 +9,11 @@ MAX_NAME_LEN = 100
 MAX_CONTENT_LEN = 30000  # keep in sync with the client-side PDF truncation guard (F-2)
 
 _lock = threading.Lock()
+# WI-A4 (audit v0.3.2): a dedicated init lock, separate from _lock. Two threads could both
+# pass `if _conn is None` before either finished sqlite3.connect() - one connection leaked,
+# the other silently became the module's _conn, and any in-flight query on the leaked
+# connection referenced a now-orphaned handle. Double-checked locking closes that window.
+_init_lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 
 
@@ -17,20 +22,26 @@ def _get_conn() -> sqlite3.Connection:
     endpoints are dispatched via asyncio.to_thread (a different thread per call), guarded
     by _lock since sqlite3 connections are not safe for concurrent use across threads."""
     global _conn
-    if _conn is None:
-        os.makedirs(os.path.dirname(config.PORTFOLIO_DB_PATH), exist_ok=True)
-        _conn = sqlite3.connect(config.PORTFOLIO_DB_PATH, check_same_thread=False)
-        _conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS portfolios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                content TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        _conn.commit()
+    if _conn is None:  # fast path - no lock once initialized
+        with _init_lock:  # serialize the one-time init
+            if _conn is None:  # double-checked: another thread may have won the race
+                os.makedirs(os.path.dirname(config.PORTFOLIO_DB_PATH), exist_ok=True)
+                _conn = sqlite3.connect(config.PORTFOLIO_DB_PATH, check_same_thread=False)
+                # WI-B3: WAL lets readers and the single writer proceed without blocking
+                # each other - the default rollback-journal mode serializes all access.
+                _conn.execute("PRAGMA journal_mode=WAL")
+                _conn.execute("PRAGMA synchronous=NORMAL")
+                _conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS portfolios (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE,
+                        content TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                _conn.commit()
     return _conn
 
 
