@@ -24,6 +24,29 @@ Aturan yang tidak boleh dilanggar:
 
 Keluaran: poin-poin singkat saja, tanpa basa-basi pembuka."""
 
+# WI-B2 (audit v0.3.2): a fresh httpx.AsyncClient per call re-pays DNS + TCP + TLS handshake
+# every single time (~100-300ms) - real latency the interviewer is waiting on. A module-level
+# singleton reuses the underlying connection pool across calls within the process lifetime.
+_http_client: httpx.AsyncClient | None = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        # No http2=True: that needs the optional `h2` package, not in requirements.txt.
+        # The claimed latency win (DNS+TCP+TLS reuse) comes from keep-alive pooling, which
+        # a plain AsyncClient already does across calls - HTTP/2 multiplexing is a separate,
+        # unrequested benefit not worth a new dependency for.
+        _http_client = httpx.AsyncClient(timeout=config.GEMINI_TIMEOUT_SEC)
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client and not _http_client.is_closed:
+        await _http_client.aclose()
+        _http_client = None
+
 
 def _build_user_content(question: str, utterances: list[dict], low_confidence: bool) -> str:
     # Only the last 6 turns: the full timeline costs tokens and latency, and adds noise
@@ -80,14 +103,24 @@ async def ask_llm(
 
     for attempt in (1, 2):
         try:
-            async with httpx.AsyncClient(timeout=config.GEMINI_TIMEOUT_SEC) as client:
-                resp = await client.post(url, params={"key": config.GEMINI_API_KEY}, json=body)
+            client = get_http_client()
+            resp = await client.post(url, params={"key": config.GEMINI_API_KEY}, json=body)
             if resp.status_code == 429:
                 log.warning("suggest_quota attempt=%d", attempt)
                 return {"ok": False, "reason": "quota", "text": "Saran tidak tersedia."}
             resp.raise_for_status()
             data = resp.json()
             text = _extract_text(data)
+            # WI-B7 (audit v0.3.2): a Gemini safety block returns an empty `candidates`
+            # array, not an HTTP error - _extract_text("") silently produced a FAKE success
+            # (ok=True, text="") that never incremented METRICS["llm_errors"].
+            if not text.strip():
+                finish_reason = (data.get("candidates") or [{}])[0].get("finishReason", "UNKNOWN")
+                log.warning(
+                    "suggest_empty_response attempt=%d finishReason=%s", attempt, finish_reason
+                )
+                last_error = f"empty-response:{finish_reason}"
+                continue
             usage = data.get("usageMetadata", {})
             log.info(
                 "gemini_usage endpoint=suggest attempt=%d prompt_tokens=%d output_tokens=%d",
