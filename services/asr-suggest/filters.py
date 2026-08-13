@@ -40,6 +40,18 @@ HALLUCINATION_NO_SPEECH_THRESHOLD = 0.3
 
 _PUNCT = re.compile(r"[.,!?;:\"'()\[\]]+")
 
+# WI-A5 (audit v0.3.2): the old `b in lowered` substring check matched BLOCKLIST single
+# words inside unrelated words too - "subscribe" inside "subscribers"/"subscription" was
+# silently dropping real interview content about SaaS/social-media metrics. Single-word
+# entries now require a word boundary; multi-word phrases keep substring matching (specific
+# enough on their own not to over-match).
+_BLOCKLIST_PATTERNS = [
+    re.compile(r"\b" + re.escape(b) + r"\b", re.IGNORECASE)
+    if " " not in b
+    else re.compile(re.escape(b), re.IGNORECASE)
+    for b in BLOCKLIST
+]
+
 
 def _is_known_hallucination(text: str, no_speech_prob: float) -> bool:
     # Only trailing punctuation, not _PUNCT's full strip - "i'm sorry" needs its apostrophe
@@ -79,8 +91,7 @@ def keep(seg, low_conf_logprob: float = -1.0) -> bool:
         return False
     if _is_known_hallucination(text, no_speech_prob):
         return False
-    lowered = text.lower()
-    return not any(b in lowered for b in BLOCKLIST)
+    return not any(p.search(text) for p in _BLOCKLIST_PATTERNS)
 
 
 def is_repetitive(text: str, max_ratio: float = 0.5) -> bool:

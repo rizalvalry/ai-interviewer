@@ -50,6 +50,14 @@ class TestKeep:
     def test_rejects_blocklisted_hallucination(self, text):
         assert keep(FakeSegment(text)) is False
 
+    def test_subscriber_not_blocked(self):
+        # WI-A5 regression: "subscribe" as a substring of "subscribers" used to trigger
+        # the BLOCKLIST, silently dropping legitimate SaaS/social-media interview content.
+        assert keep(FakeSegment("We grew to 10,000 subscribers in Q1.")) is True
+
+    def test_subscribe_standalone_blocked(self):
+        assert keep(FakeSegment("like dan subscribe")) is False
+
     def test_rejects_segment_shorter_than_300ms(self):
         assert keep(FakeSegment("ya", start=1.0, end=1.2)) is False
 
