@@ -81,8 +81,11 @@ def get_portfolio(portfolio_id: int) -> dict | None:
 
 def upsert_portfolio(name: str, content: str) -> dict:
     """Duplicate name -> replace content in place (natural "update CV" flow, WI-13). Explicit
-    select-then-update/insert under _lock rather than an ON CONFLICT upsert, since the schema
-    above has no UNIQUE constraint on name and a single local writer has no real race to guard."""
+    select-then-update/insert under _lock rather than an `INSERT ... ON CONFLICT(name) DO
+    UPDATE` upsert: the schema does have a UNIQUE(name) constraint (WI-A4), but that's a
+    defensive DB-level guarantee, not what this function relies on for correctness - _lock
+    already serializes every writer, so the two-step form works and needs no SQL upsert
+    syntax to stay correct."""
     conn = _get_conn()
     now = datetime.now(timezone.utc).isoformat()
     with _lock:
