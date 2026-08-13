@@ -271,6 +271,13 @@ async def stream(ws: WebSocket):
 
             seq = int.from_bytes(data[0:4], "big")
             ch_id = data[4]
+            # WI-D1 (audit v0.3.2): ch_id is a raw, client-controlled byte (0-255). Only 0
+            # (candidate) and 1 (interviewer) are ever meaningful - accepting anything else
+            # let a malicious client allocate up to 256 ChannelState buffers per connection
+            # (~488 MB) for free.
+            if ch_id not in (0, 1):
+                log.warning("ws_invalid_channel session=%s ch_id=%d", session_id, ch_id)
+                continue
             state = channels.setdefault(ch_id, ChannelState())
 
             # Reconnect replays the queued frames; seq makes duplicates detectable.
