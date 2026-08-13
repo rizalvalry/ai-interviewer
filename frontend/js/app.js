@@ -191,18 +191,19 @@ async function startDialog() {
       await pipe(sysStream, 'interviewer', wsInterviewer, ctx, setLevel),
     ];
 
-    // Guarded: stopDialog() also stops these tracks intentionally, which fires this same
-    // 'ended' event - without the guard, a deliberate stop races into an ERROR transition
-    // AFTER stopDialog has already moved on, leaving the state machine stuck (bug-hunter,
-    // 2026-08-12).
-    micStream.getAudioTracks()[0].onended = () => {
+    // WI-A2: an unrequested track end (device unplugged, "Stop sharing" from the browser's
+    // own tab-share UI) must not just flag ERROR - it must also run the SAME cleanup as a
+    // deliberate Stop, or the old stream/ctx/WS instances stay alive and race a fresh
+    // startDialog() if the user immediately clicks Start again.
+    const cleanupAndError = (reason) => {
       if (!sm.is('LIVE', 'RECONNECTING')) return;
-      sm.transition('ERROR', 'mic-ended');
+      sm.transition('ERROR', reason);
+      stopDialog().catch(() => {}); // fire-and-forget cleanup
     };
-    sysStream.getAudioTracks()[0].onended = () => {
-      if (!sm.is('LIVE', 'RECONNECTING')) return;
-      sm.transition('ERROR', 'display-ended');
-    };
+    micStream.getAudioTracks()[0].onended = () => cleanupAndError('mic-ended');
+    sysStream.getAudioTracks().forEach((t) => {
+      t.onended = () => cleanupAndError('display-ended');
+    });
 
     sm.transition('LIVE');
   } catch (err) {
@@ -214,26 +215,40 @@ async function startDialog() {
 async function stopDialog() {
   if (sm.is('IDLE', 'STOPPED')) return;
   sm.transition('STOPPING');
-
-  // Detach onended before stopping tracks - a deliberate stop must not also fire the
-  // 'ended' handler (the state-based guard on the handler already covers this, but
-  // detaching first is the more direct fix and matches the handoff's Fix 1).
-  [micStream, sysStream].forEach((s) => s?.getAudioTracks().forEach((t) => { t.onended = null; }));
-  [micStream, sysStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
-  nodes.forEach(({ node, src }) => { try { src.disconnect(); node.disconnect(); } catch {} });
-  wsCandidate?.close();
-  wsInterviewer?.close();
-  if (ctx && ctx.state !== 'closed') await ctx.close();   // releases the audio hardware
-
-  micStream = sysStream = ctx = null;
-  wsCandidate = wsInterviewer = null;
-  nodes = [];
-  echo = null;
-  setChannelStatus('candidate', false);
-  setChannelStatus('interviewer', false);
-
-  sm.transition('STOPPED');
-  sm.transition('IDLE');
+  // WI-A1: the whole body used to run un-guarded - if ctx.close() ever rejects (a real,
+  // spec-permitted edge case), every line after it - including the STOPPED/IDLE transitions
+  // - never ran, wedging the state machine in STOPPING forever (Start/Stop both disabled,
+  // no recovery short of a page reload). try/finally guarantees the state always unwinds.
+  try {
+    // Detach onended before stopping tracks - a deliberate stop must not also fire the
+    // 'ended' handler (the state-based guard on the handler already covers this, but
+    // detaching first is the more direct fix and matches the handoff's Fix 1).
+    [micStream, sysStream].forEach((s) => {
+      s?.getAudioTracks().forEach((t) => { t.onended = null; });
+      s?.getTracks().forEach((t) => t.stop());
+    });
+    nodes.forEach(({ node, src }) => {
+      try { node.port.onmessage = null; src.disconnect(); node.disconnect(); } catch {}
+    });
+    wsCandidate?.close();
+    wsInterviewer?.close();
+    if (ctx && ctx.state !== 'closed') {
+      try { await ctx.close(); } catch { /* browser edge case - suppress, resources freed */ }
+    }
+  } finally {
+    // ALWAYS runs - state MUST return to IDLE regardless of what failed above.
+    micStream = sysStream = ctx = null;
+    wsCandidate = wsInterviewer = null;
+    nodes = [];
+    echo = null;
+    $('echoWarn').hidden = true;
+    $('bufferWarn').hidden = true;
+    $('btnSmartAnswer').disabled = true;
+    setChannelStatus('candidate', false);
+    setChannelStatus('interviewer', false);
+    sm.transition('STOPPED');
+    sm.transition('IDLE');
+  }
 }
 
 setInterval(() => {
