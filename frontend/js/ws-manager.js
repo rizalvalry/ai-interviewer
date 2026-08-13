@@ -33,6 +33,10 @@ export class WSManager {
       this.timer = setTimeout(() => this.open(), delay);
       return;
     }
+    // WI-A3: open() is async - close() can be called during the `await` above (e.g. Stop
+    // clicked while a fresh token was still in flight). Without this check the closed
+    // manager would open a brand new WebSocket right after being told to shut down.
+    if (this.closed) return;
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
 
