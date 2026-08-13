@@ -60,6 +60,10 @@ async def lifespan(_: FastAPI):
     if config.ALLOW_DEV_TOKEN:
         log.warning("ALLOW_DEV_TOKEN=true - /dev/token is live. Never enable this on a public Space.")
     yield
+    # WI-B2: release the persistent Gemini connection pools on shutdown instead of leaving
+    # the sockets to the OS/GC.
+    await suggest.close_http_client()
+    await translate.close_http_client()
 
 
 app = FastAPI(title="ai.interviewer ASR", lifespan=lifespan)
@@ -231,6 +235,11 @@ async def stream(ws: WebSocket):
 
     ok, reason = auth.verify(session_id, token)
     if not ok:
+        # WI-B1 (audit v0.3.2): per RFC 6455/ASGI, a close frame can't be delivered before
+        # the HTTP Upgrade completes - closing pre-accept() reaches the client as a bare
+        # HTTP 403, never the 4401 code WSManager relies on to stop retrying a dead auth.
+        await ws.accept()
+        await ws.send_json({"type": "error", "code": 4401, "reason": reason})
         await ws.close(code=4401, reason=reason)
         log.warning("ws_rejected session=%s reason=%s", session_id, reason)
         return
