@@ -1,3 +1,4 @@
+import logging
 import os
 
 SR = 16000
@@ -41,7 +42,9 @@ if OVERLAP_SEC >= WINDOW_SEC:
     )
 
 MAX_BUF_SEC = int(os.getenv("MAX_BUF_SEC", "30"))
-IDLE_TIMEOUT_SEC = int(os.getenv("IDLE_TIMEOUT_SEC", "30"))
+# WI-C2 (audit v0.3.2): 30s was too short for a natural interview pause (candidate thinking,
+# scrolling notes) - the WS would idle-disconnect mid-thought, forcing a reconnect.
+IDLE_TIMEOUT_SEC = int(os.getenv("IDLE_TIMEOUT_SEC", "120"))
 
 ENERGY_GATE_DB = float(os.getenv("ENERGY_GATE_DB", "-45.0"))
 VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", "0.5"))
@@ -62,7 +65,17 @@ LOW_CONF_LOGPROB = float(os.getenv("LOW_CONF_LOGPROB", "-0.85"))
 
 # Empty secret disables WS auth. Acceptable on localhost only: a public HF Space without
 # this is an open CPU faucet for anyone who finds the URL.
-AUTH_SECRET = os.getenv("AUTH_SECRET", "")
+#
+# WI-C2 (audit v0.3.2): a non-empty sentinel default lets the server start (with a loud
+# warning) if a stale/partial .env is missing this line, instead of a hard crash - the real
+# security boundary here is the 127.0.0.1 port binding (docker-compose.yml), not this value;
+# .env.example already ships this exact string as its real default, so this changes nothing
+# for anyone following the documented setup, only for a malformed/incomplete .env.
+AUTH_SECRET = os.getenv("AUTH_SECRET", "localhost-dev-secret-change-me")
+if AUTH_SECRET == "localhost-dev-secret-change-me":
+    logging.getLogger("config").warning(
+        "AUTH_SECRET menggunakan nilai default — ganti di .env sebelum deploy ke luar localhost"
+    )
 # 120 s caused permanent channel death on interviews > 2 min: WS reconnect with
 # expired token -> backend 4401 -> WSManager stops retrying but channel stays DEAD.
 # 7200 (2 h) covers any real interview session at localhost where the security
@@ -92,7 +105,10 @@ GEMINI_SUGGEST_MODEL = os.getenv("GEMINI_SUGGEST_MODEL", "gemini-3.5-flash")
 GEMINI_TRANSLATE_MODEL = os.getenv("GEMINI_TRANSLATE_MODEL", "gemini-3.5-flash-lite")
 GEMINI_TIMEOUT_SEC = float(os.getenv("GEMINI_TIMEOUT_SEC", "15"))
 
-CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "*").split(",") if o]
+# WI-C2 (audit v0.3.2): "*" let any origin call this API - harmless only by accident since
+# the port is loopback-only, but the frontend's own origin is always known, so there is no
+# reason to accept requests from anywhere else.
+CORS_ORIGINS = [o for o in os.getenv("CORS_ORIGINS", "http://127.0.0.1:5500").split(",") if o]
 
 # ADR Addendum 2026-08-11 (3): riwayat portfolio di SQLite (stdlib), file di named volume
 # (docker-compose.yml) - never a bind-mount into the repo tree, so a CV can never land in git.
