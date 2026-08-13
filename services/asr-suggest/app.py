@@ -269,7 +269,9 @@ async def stream(ws: WebSocket):
             if data is None or len(data) <= HEADER_BYTES:
                 continue
 
-            seq = int.from_bytes(data[0:4], "big")
+            # LOW (audit v0.3.2): named frame_seq, not seq, so it can't be confused with the
+            # unrelated per-utterance seq assigned later in this same loop iteration.
+            frame_seq = int.from_bytes(data[0:4], "big")
             ch_id = data[4]
             # WI-D1 (audit v0.3.2): ch_id is a raw, client-controlled byte (0-255). Only 0
             # (candidate) and 1 (interviewer) are ever meaningful - accepting anything else
@@ -280,11 +282,11 @@ async def stream(ws: WebSocket):
                 continue
             state = channels.setdefault(ch_id, ChannelState())
 
-            # Reconnect replays the queued frames; seq makes duplicates detectable.
-            if seq <= state.last_seq:
+            # Reconnect replays the queued frames; frame_seq makes duplicates detectable.
+            if frame_seq <= state.last_seq:
                 METRICS["frames_rejected_seq"] += 1
                 continue
-            state.last_seq = seq
+            state.last_seq = frame_seq
 
             # F-1 batching: checked on every frame, not only when a new segment is produced -
             # the ~4s ceiling must still fire during a pause with no new transcribed text.
@@ -355,12 +357,15 @@ async def stream(ws: WebSocket):
                 if not text:
                     continue
                 state.last_text = seg["text"]
-                seq = next_utt_seq
+                # LOW (audit v0.3.2): utt_seq, not seq - the wire-protocol JSON key below
+                # stays "seq" (frontend/translate.py both read that field name), only the
+                # Python-local variable is renamed to avoid reading as the frame_seq above.
+                utt_seq = next_utt_seq
                 next_utt_seq += 1
                 await ws.send_json(
                     {
                         "type": "transcript",
-                        "seq": seq,
+                        "seq": utt_seq,
                         "ch": CHANNEL_NAMES.get(ch_id, "unknown"),
                         "text": text,
                         "lang": lang,
@@ -375,7 +380,7 @@ async def stream(ws: WebSocket):
                 # F-1: English only, queued for the batcher above - never awaited here, and
                 # Indonesian speech never touches translate.py at all (nol panggilan API).
                 if lang == "en" and text.strip():
-                    state.translation_batch.add(seq, text)
+                    state.translation_batch.add(utt_seq, text)
                 state.history = cap_history(state.history, text)
 
     except (WebSocketDisconnect, asyncio.TimeoutError):

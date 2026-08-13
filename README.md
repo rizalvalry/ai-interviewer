@@ -20,6 +20,11 @@ Prasyarat: Docker Desktop (atau Docker CLI + engine) dan Git terpasang. Tidak ad
 manual lain — `.env.example` sudah berisi nilai default mode localhost yang siap pakai,
 kecuali `GEMINI_API_KEY` (satu-satunya kredensial wajib) yang harus diisi sendiri per laptop.
 
+> **Port 5500 bentrok dengan VS Code Live Server?** Ekstensi Live Server juga default ke
+> port 5500 — kalau sedang aktif, `docker compose up` untuk `frontend` akan gagal bind port.
+> Matikan Live Server dulu, atau ubah pemetaan port `frontend` di `docker-compose.yml`
+> (mis. `"127.0.0.1:5501:80"`) dan sesuaikan URL yang dibuka.
+
 ## Stop
 
 ```

@@ -146,6 +146,7 @@ async function requestSuggestion() {
 
 async function startDialog() {
   if (!sm.transition('REQUESTING_MIC')) return;
+  startMetricsInterval();
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -237,6 +238,8 @@ async function stopDialog() {
     }
   } finally {
     // ALWAYS runs - state MUST return to IDLE regardless of what failed above.
+    clearInterval(metricsInterval);
+    metricsInterval = null;
     micStream = sysStream = ctx = null;
     wsCandidate = wsInterviewer = null;
     nodes = [];
@@ -251,12 +254,19 @@ async function stopDialog() {
   }
 }
 
-setInterval(() => {
-  $('mDropped').textContent =
-    (wsCandidate?.stats.dropped || 0) + (wsInterviewer?.stats.dropped || 0);
-  $('mReconnects').textContent =
-    (wsCandidate?.stats.reconnects || 0) + (wsInterviewer?.stats.reconnects || 0);
-}, 1000);
+// LOW (audit v0.3.2): started once at startDialog(), stopped at stopDialog() - previously
+// ran forever from page load, uselessly re-writing "0" to the footer for the entire time
+// the user has the tab open before ever pressing Start.
+let metricsInterval = null;
+
+function startMetricsInterval() {
+  metricsInterval = setInterval(() => {
+    $('mDropped').textContent =
+      (wsCandidate?.stats.dropped || 0) + (wsInterviewer?.stats.dropped || 0);
+    $('mReconnects').textContent =
+      (wsCandidate?.stats.reconnects || 0) + (wsInterviewer?.stats.reconnects || 0);
+  }, 1000);
+}
 
 $('btnStart').addEventListener('click', startDialog);
 $('btnStop').addEventListener('click', stopDialog);
@@ -268,7 +278,16 @@ $('btnClear').addEventListener('click', () => {
   $('suggestion').className = 'muted';
 });
 $('btnSmartAnswer').addEventListener('click', requestSuggestion);
-window.addEventListener('beforeunload', () => { stopDialog(); });
+// LOW (audit v0.3.2): beforeunload must not rely on stopDialog()'s async path - browsers do
+// not wait for in-flight promises (ctx.close(), etc.) once the page starts tearing down, so
+// releasing the mic/screen-share/WS synchronously here is the only part actually guaranteed
+// to run.
+function hardStopSync() {
+  [micStream, sysStream].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
+  wsCandidate?.close();
+  wsInterviewer?.close();
+}
+window.addEventListener('beforeunload', hardStopSync);
 
 // F-2: extraction is client-side only; the result just fills the existing #portfolio
 // textarea (still editable) — /suggest and its payload shape are unchanged.
